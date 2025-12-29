@@ -333,6 +333,9 @@ def render_sidebar():
             token_changed = False
             current_token = st.session_state.get("saved_api_token", CONFIG["token"])
             
+            # 检查是否有初始token（从secrets或env var）但尚未保存到session_state
+            has_initial_token = CONFIG["token"] and not st.session_state.get("saved_api_token")
+            
             if remember_token:
                 if st.session_state.get("saved_api_token") != user_token:
                     st.session_state["saved_api_token"] = user_token
@@ -345,6 +348,13 @@ def render_sidebar():
                     token_changed = True
                     # 取消记住时，使用空token
                     user_token = ""
+            
+            # 如果有初始token但尚未处理，触发token变化
+            if has_initial_token and not token_changed:
+                token_changed = True
+                user_token = CONFIG["token"]
+                st.session_state["saved_api_token"] = user_token
+                st.session_state["remember_token"] = True
             
             # 处理会话列表逻辑
             if user_token:
@@ -475,81 +485,12 @@ def render_chat_area():
                     # 显示附件信息
                     if "file_name" in message and message["file_name"]:
                         st.caption(f"📎 附件: {message['file_name']}")
-        
-        st.markdown(
-            """
-            <style>
-                /* 定义悬浮按钮样式 */
-                .fixed-bottom-btn {
-                    position: fixed;
-                    bottom: 90px; /* 距离底部的高度，避开输入框 */
-                    right: 30px;  /* 距离右侧的距离 */
-                    width: 40px;
-                    height: 40px;
-                    border-radius: 50%;
-                    background-color: #ffffff;
-                    color: #31333F;
-                    border: 1px solid #e0e0e0;
-                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                    z-index: 99999;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    cursor: pointer;
-                    font-size: 20px;
-                    transition: all 0.3s ease;
-                    user-select: none;
-                }
-
-                /* 悬停效果 */
-                .fixed-bottom-btn:hover {
-                    background-color: #f0f2f6;
-                    transform: translateY(-2px);
-                    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-                    border-color: #ff4b4b;
-                    color: #ff4b4b;
-                }
-
-                /* 点击效果 */
-                .fixed-bottom-btn:active {
-                    transform: translateY(0);
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                }
-            </style>
-
-            <!-- 注入 HTML 按钮和 JavaScript 滚动逻辑 -->
-            <div class="fixed-bottom-btn" onclick="scrollToBottom()" title="回到底部">
-                🔽
-            </div>
-
-            <script>
-            function scrollToBottom() {
-                // 获取 Streamlit 的主滚动容器
-                // 通常是带有 data-testid='stAppViewContainer' 的元素
-                const container = window.parent.document.querySelector('[data-testid="stAppViewContainer"]');
-
-                if (container) {
-                    container.scrollTo({
-                        top: container.scrollHeight,
-                        behavior: 'smooth'
-                    });
-                } else {
-                    // 备用方案：尝试滚动 body
-                    window.scrollTo({
-                        top: document.body.scrollHeight,
-                        behavior: 'smooth'
-                    });
-                }
-            }
-            </script>
-            """,
-            unsafe_allow_html=True
-        )
 # 渲染输入区域
 def render_input_area():
     """
     渲染输入区域组件
     """
+    
     # 聊天输入框 - 支持文件上传，使用st.chat_input的accept_file参数
     chat_input = st.chat_input(
         placeholder="输入您的问题...",
