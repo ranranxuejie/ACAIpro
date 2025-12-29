@@ -582,11 +582,28 @@ def handle_user_input(prompt, uploaded_file):
         st.session_state.messages.append({"role": "assistant", "content": full_response})
 
 # 自动加载模型列表和会话
-
 def auto_load_data():
     """
     自动加载模型列表和会话
     """
+    # 检查并处理初始token
+    def process_initial_token():
+        """
+        检查并处理初始token
+        """
+        # 检查是否有初始token（从secrets或env var）但尚未保存到session_state
+        has_initial_token = CONFIG["token"] and not st.session_state.get("saved_api_token")
+        
+        if has_initial_token:
+            # 保存初始token到session_state
+            st.session_state["saved_api_token"] = CONFIG["token"]
+            st.session_state["remember_token"] = True
+            return True
+        return False
+    
+    # 处理初始token
+    token_processed = process_initial_token()
+    
     # 自动加载模型列表
     if not st.session_state.models:
         bot_instance = AIClient(st.session_state.get("saved_api_token", CONFIG["token"]))
@@ -599,7 +616,7 @@ def auto_load_data():
 
     # 自动加载会话列表并打开最近一次对话
     # 只有在会话列表为空时才加载，避免无限循环
-    if not st.session_state.sessions:  # 恢复只有在会话列表为空时才加载的限制
+    if not st.session_state.sessions or token_processed:  # 当token被处理时，强制加载会话列表
         bot_instance = AIClient(st.session_state.get("saved_api_token", CONFIG["token"]))
         success, data = bot_instance.get_sessions()
         if success:
