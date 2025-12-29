@@ -9,31 +9,27 @@ import os
 
 # 优先从streamlit secrets读取，然后是环境变量，最后是文件
 # Streamlit Secrets配置示例（.streamlit/secrets.toml）：
-# [achuan_ai]
+# [ai_client]
 # token = "your-api-token"
-# base_url = "https://achuanai.vip/api"
 
 DEFAULT_TOKEN = ""
+# API服务器地址配置
 BASE_URL = "https://achuanai.vip/api"
 
 # 尝试从streamlit secrets读取
 if hasattr(st, 'secrets'):
     try:
-        DEFAULT_TOKEN = st.secrets.get("achuan_ai", {}).get("token", "")
-        BASE_URL = st.secrets.get("achuan_ai", {}).get("base_url", "https://achuanai.vip/api")
+        DEFAULT_TOKEN = st.secrets.get("ai_client", {}).get("token", "")
     except Exception:
         pass
 
 # 从环境变量读取，覆盖secrets配置
-if os.getenv("ACHUAN_AI_TOKEN"):
-    DEFAULT_TOKEN = os.getenv("ACHUAN_AI_TOKEN")
-    
-if os.getenv("ACHUAN_AI_BASE_URL"):
-    BASE_URL = os.getenv("ACHUAN_AI_BASE_URL")
+if os.getenv("AI_CLIENT_TOKEN"):
+    DEFAULT_TOKEN = os.getenv("AI_CLIENT_TOKEN")
 
 
 # ================= 核心后端逻辑 (兼容原代码) =================
-class AchuanBot:
+class AIClient:
     def __init__(self, token):
         self.token = token
         self.session_id = None
@@ -234,7 +230,7 @@ if "current_session_model" not in st.session_state:
 
 # 自动加载模型列表
 if not st.session_state.models:
-    bot_instance = AchuanBot(DEFAULT_TOKEN)
+    bot_instance = AIClient(DEFAULT_TOKEN)
     success, data = bot_instance.get_model_list()
     if success:
         st.session_state.models = data.get("models", [])
@@ -245,7 +241,7 @@ if not st.session_state.models:
 
 # 自动加载会话列表并打开最近一次对话
 if not st.session_state.sessions:
-    bot_instance = AchuanBot(DEFAULT_TOKEN)
+    bot_instance = AIClient(DEFAULT_TOKEN)
     success, data = bot_instance.get_sessions()
     if success:
         st.session_state.sessions = data
@@ -314,7 +310,7 @@ with st.sidebar:
         "API Token",
         value=saved_token,
         type="password",
-        help="输入您的Achuan AI API令牌，可从 https://achuanai.vip 获取",
+        help="输入您的API令牌",
         key="api_token_input"  # 添加唯一key，避免重复ID错误
     )
     
@@ -334,7 +330,7 @@ with st.sidebar:
     # 当用户输入token时，重新加载会话列表
     if user_token:
         # 创建bot实例使用用户输入的token
-        bot_instance = AchuanBot(user_token)
+        bot_instance = AIClient(user_token)
         
         # 如果会话列表为空，加载会话列表
         if not st.session_state.sessions:
@@ -403,7 +399,7 @@ with st.sidebar:
         if not user_token:
             st.error("请先输入API Token！")
         else:
-            bot_instance = AchuanBot(user_token)
+            bot_instance = AIClient(user_token)
             # 使用用户选择的模型创建会话
             success, msg = bot_instance.create_session(model=st.session_state.selected_model)
             if success:
@@ -502,7 +498,7 @@ with st.sidebar:
                         st.toast(f"加载历史记录失败: {data}", icon="❌")
                         st.toast(f"已切换到会话: {session_name}", icon="✅")
                 else:
-                    bot_instance = AchuanBot(user_token)
+                    bot_instance = AIClient(user_token)
                     bot_instance.session_id = session_id
                     st.session_state.bot = bot_instance
                     
@@ -576,6 +572,30 @@ def process_ai_content(content):
     else:
         # 没有<think>标签，返回原内容
         return content, None
+
+# 5. 渲染历史聊天记录
+for message in st.session_state.messages:
+    # 区分用户和AI的样式
+    avatar = "👤" if message["role"] == "user" else "🤖"
+    with st.chat_message(message["role"], avatar=avatar):
+        if message["role"] == "assistant":
+            # 处理AI回复，折叠<think>内容
+            main_content, think_content = process_ai_content(message["content"])
+            
+            # 如果有思考内容，使用折叠面板显示在最上面
+            if think_content:
+                with st.expander("查看深度思考"):
+                    st.markdown(think_content)
+            
+            # 显示主要内容
+            if main_content:
+                st.markdown(main_content)
+        else:
+            # 用户消息直接显示
+            st.markdown(message["content"])
+        
+        if "file_name" in message and message["file_name"]:
+            st.caption(f"📎 附件: {message['file_name']}")
 
 # 6. 处理用户输入
 # 聊天输入区域
@@ -651,30 +671,6 @@ with st.container():
         
         if uploaded_file:
             st.info(f"已选择: {uploaded_file.name}")
-
-# 5. 渲染历史聊天记录
-for message in st.session_state.messages:
-    # 区分用户和AI的样式
-    avatar = "👤" if message["role"] == "user" else "🤖"
-    with st.chat_message(message["role"], avatar=avatar):
-        if message["role"] == "assistant":
-            # 处理AI回复，折叠<think>内容
-            main_content, think_content = process_ai_content(message["content"])
-            
-            # 如果有思考内容，使用折叠面板显示在最上面
-            if think_content:
-                with st.expander("查看深度思考"):
-                    st.markdown(think_content)
-            
-            # 显示主要内容
-            if main_content:
-                st.markdown(main_content)
-        else:
-            # 用户消息直接显示
-            st.markdown(message["content"])
-        
-        if "file_name" in message and message["file_name"]:
-            st.caption(f"📎 附件: {message['file_name']}")
 
 if prompt:
 
