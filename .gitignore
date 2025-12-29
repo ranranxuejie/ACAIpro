@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build and deployment
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+envs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Streamlit
+.streamlit/
+.cache/
+
+# Test and coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Other
+*.secret
+*.key
+*.token
