@@ -234,10 +234,9 @@ if not st.session_state.models:
     success, data = bot_instance.get_model_list()
     if success:
         st.session_state.models = data.get("models", [])
-        # 设置默认模型为defModel
-        if data.get("defModel"):
-            st.session_state.selected_model = data.get("defModel")
-            st.session_state.current_session_model = data.get("defModel")
+        # 始终默认使用gemini的preview模型，不受API返回的defModel影响
+        st.session_state.selected_model = "gemini-3-pro-preview"
+        st.session_state.current_session_model = "gemini-3-pro-preview"
 
 # 自动加载会话列表并打开最近一次对话
 if not st.session_state.sessions:
