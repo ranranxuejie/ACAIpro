@@ -1,52 +1,20 @@
-# Python
+# Ignore tokens.txt file
+tokens.txt
+
+# Ignore Python files
+*.pyc
 __pycache__/
-*.py[cod]
-*$py.class
 
-# Environment variables
-.env
-.env.local
-.env.*.local
+# Ignore Streamlit files
+.streamlit/secrets.toml
 
-# IDE
-.idea/
+# Ignore IDE files
 .vscode/
-*.swp
-*.swo
-*~
+.idea/
 
-# OS
+# Ignore OS files
 .DS_Store
 Thumbs.db
 
-# Build and deployment
+# Ignore log files
 *.log
-*.pid
-*.seed
-*.pid.lock
-
-# Virtual environments
-venv/
-env/
-.venv/
-ENV/
-envs/
-
-# Temporary files
-*.tmp
-*.temp
-.cache/
-
-# Streamlit
-.streamlit/
-.cache/
-
-# Test and coverage
-.coverage
-htmlcov/
-.pytest_cache/
-
-# Other
-*.secret
-*.key
-*.token
