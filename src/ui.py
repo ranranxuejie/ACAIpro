@@ -266,7 +266,7 @@ def render_sidebar():
                                                 st.session_state.messages.append({
                                                     "role": "user",
                                                     "content": user_text,
-                                                    "tokens": record.get("useTokens", 0),
+                                                    "tokens": record.get("completionTokens", 0),
                                                     "files": use_files,
                                                     "file_name": record.get("fileName", "")
                                                 })
@@ -276,7 +276,7 @@ def render_sidebar():
                                                 st.session_state.messages.append({
                                                     "role": "assistant",
                                                     "content": ai_text,
-                                                    "tokens": record.get("useTokens", 0)
+                                                    "tokens": record.get("completionTokens", 0)
                                                 })
                                             
                                             # 同时更新全局useFiles列表，避免重复
@@ -323,7 +323,7 @@ def render_sidebar():
                                                 st.session_state.messages.append({
                                                     "role": "user",
                                                     "content": user_text,
-                                                    "tokens": record.get("useTokens", 0),
+                                                    "tokens": record.get("completionTokens", 0),
                                                     "files": use_files,
                                                     "file_name": record.get("fileName", "")
                                                 })
@@ -333,7 +333,7 @@ def render_sidebar():
                                                 st.session_state.messages.append({
                                                     "role": "assistant",
                                                     "content": ai_text,
-                                                    "tokens": record.get("useTokens", 0)
+                                                    "tokens": record.get("completionTokens", 0)
                                                 })
                                             
                                             # 同时更新全局useFiles列表，避免重复
@@ -493,7 +493,7 @@ def render_sidebar():
                                         st.session_state.messages.append({
                                             "role": "user",
                                             "content": user_text,
-                                            "tokens": record.get("useTokens", 0),
+                                            "tokens": record.get("completionTokens", 0),
                                             "files": use_files,  # 添加历史记录中的文件信息
                                             "file_name": record.get("fileName", "")  # 兼容旧的文件名记录
                                         })
@@ -501,7 +501,7 @@ def render_sidebar():
                                         st.session_state.messages.append({
                                             "role": "assistant",
                                             "content": ai_text,
-                                            "tokens": record.get("useTokens", 0)
+                                            "tokens": record.get("completionTokens", 0)
                                         })
                                     
                                     # 同时更新全局useFiles列表，避免重复
@@ -571,7 +571,47 @@ def render_sidebar():
                 CONFIG["contextCount"] = st.session_state.chat_params["contextCount"]
                 CONFIG["prompt"] = st.session_state.chat_params["prompt"]
                 CONFIG["temperature"] = st.session_state.chat_params["temperature"]
-                st.toast("对话参数已保存", icon="✅")
+                
+                # 发送PUT请求到API更新会话参数
+                if st.session_state.bot and st.session_state.bot.session_id:
+                    import requests
+                    
+                    # 构建请求URL
+                    session_id = st.session_state.bot.session_id
+                    url = f"{CONFIG['base_url']}/chat/session/{session_id}"
+                    
+                    # 构建完整的请求负载，包含所有必要字段
+                    payload = {
+                        "id": int(session_id),
+                        "name": "新对话",  # 暂时使用默认名称
+                        "model": st.session_state.selected_model,
+                        "contextCount": st.session_state.chat_params["contextCount"],
+                        "temperature": st.session_state.chat_params["temperature"],
+                        "prompt": st.session_state.chat_params["prompt"],
+                        "presencePenalty": CONFIG["presencePenalty"],
+                        "frequencyPenalty": CONFIG["frequencyPenalty"],
+                        "maxToken": CONFIG["maxToken"],
+                        "topSort": CONFIG["topSort"],
+                        "plugins": [],
+                        "mcp": [],
+                        "icon": "",
+                        "useAppId": 0
+                    }
+                    
+                    # 获取当前bot的headers
+                    headers = st.session_state.bot.headers
+                    
+                    try:
+                        # 发送PUT请求
+                        response = requests.put(url, headers=headers, json=payload)
+                        if response.status_code == 200:
+                            st.toast("对话参数已保存", icon="✅")
+                        else:
+                            st.toast(f"保存失败: {response.status_code}", icon="❌")
+                    except Exception as e:
+                        st.toast(f"保存失败: {str(e)}", icon="❌")
+                else:
+                    st.toast("请先连接会话", icon="❌")
 
 # 渲染聊天区域
 def render_chat_area():
@@ -667,75 +707,55 @@ def render_chat_area():
     """, unsafe_allow_html=True)
     
     # 渲染历史聊天记录
-    if not st.session_state.messages:
-        # 空状态提示
-        st.info("请在下方输入您的问题开始对话。")
-    else:
-        # 使用容器渲染聊天记录，优化滚动性能
-        chat_container = st.container()
-        with chat_container:
-            for message in st.session_state.messages:
-                # 区分用户和AI的样式
-                avatar = " " if message["role"] == "user" else " "
-                
-                # 显示消息内容
-                with st.chat_message(message["role"]):
-                    if message["role"] == "user":
-                        # 用户消息实现：显示部分内容+点击展开，超过50行时展开
-                        content = message["content"]
-                        
-                        # 使用file_utils模块格式化文件附件
-                        from .file_utils import format_file_attachments
-                        file_html = format_file_attachments(
-                            message.get("files", []),
-                            message.get("file_name"),
-                            message.get("file_url")
-                        )
-                        
-                        # 如果有文件附件，使用HTML显示
-                        if file_html:
-                            st.markdown(file_html, unsafe_allow_html=True)
-                            # 添加换行
-                            st.markdown("\n\n")
-                        
-                        # 定义显示的初始行数
-                        initial_lines = 50
-                        lines = content.split('\n')
-                        
-                        if len(lines) > initial_lines:
-                            # 显示前面的部分内容
-                            initial_content = '\n'.join(lines[:initial_lines])
-                            
-                            # 显示初始内容，使用st.text避免markdown渲染
-                            st.text(initial_content)
-                            
-                            # 使用st.expander实现点击展开
-                            with st.expander("... 展开查看完整消息"):
-                                # 显示完整消息，使用st.text避免markdown渲染
-                                st.text(content)
-                        else:
-                            # 短消息直接显示，使用st.text避免markdown渲染
-                            st.text(content)
-                    else:
-                        # AI消息使用默认样式
-                        # 处理AI回复，折叠<think>内容
-                        from .utils import process_ai_content
-                        main_content, think_content, _ = process_ai_content(message["content"])
-                        
-                        # 如果有思考内容，使用折叠面板显示
-                        if think_content:
-                            with st.expander("查看思考过程"):
-                                st.markdown(think_content)
-                        
-                        # 显示主要内容 - 不限制高度
-                        if main_content:
-                            st.markdown(main_content)
-                
-                # 在每个AI回复下方展示completionTokens
-                if message["role"] == "assistant":
-                    # 显示tokens使用信息
-                    use_tokens = message.get("tokens", 0)
-                    st.caption(f"💡 Use Tokens : {use_tokens}")
+    # 始终渲染聊天容器，即使消息为空
+    chat_container = st.container()
+    with chat_container:
+        for message in st.session_state.messages:
+            # 区分用户和AI的样式
+            avatar = " " if message["role"] == "user" else " "
+            
+            # 显示消息内容
+            with st.chat_message(message["role"]):
+                if message["role"] == "user":
+                    # 用户消息实现：直接显示完整消息
+                    content = message["content"]
+                    
+                    # 使用file_utils模块格式化文件附件
+                    from .file_utils import format_file_attachments
+                    file_html = format_file_attachments(
+                        message.get("files", []),
+                        message.get("file_name"),
+                        message.get("file_url")
+                    )
+                    
+                    # 如果有文件附件，使用HTML显示
+                    if file_html:
+                        st.markdown(file_html, unsafe_allow_html=True)
+                        # 添加换行
+                        st.markdown("\n\n")
+                    
+                    # 直接显示完整消息，使用st.text避免markdown渲染
+                    st.text(content)
+                else:
+                    # AI消息使用默认样式
+                    # 处理AI回复，折叠<think>内容
+                    from .utils import process_ai_content
+                    main_content, think_content, _ = process_ai_content(message["content"])
+                    
+                    # 如果有思考内容，使用折叠面板显示
+                    if think_content:
+                        with st.expander("查看思考过程"):
+                            st.markdown(think_content)
+                    
+                    # 显示主要内容 - 不限制高度
+                    if main_content:
+                        st.markdown(main_content)
+            
+            # 在每个AI回复下方展示completionTokens
+            if message["role"] == "assistant":
+                # 显示tokens使用信息
+                use_tokens = message.get("tokens", 0)
+                st.caption(f"💡 Use Tokens : {use_tokens}")
 # 渲染输入区域
 def render_input_area():
     """
@@ -964,13 +984,13 @@ def auto_load_data():
                                     st.session_state.messages.append({
                                         "role": "user",
                                         "content": user_text,
-                                        "tokens": record.get("useTokens", 0)
+                                        "tokens": record.get("completionTokens", 0)
                                     })
                                 if ai_text:
                                     st.session_state.messages.append({
                                         "role": "assistant",
                                         "content": ai_text,
-                                        "tokens": record.get("useTokens", 0)
+                                        "tokens": record.get("completionTokens", 0)
                                     })
             else:
                 # 会话列表为空时，初始化bot

@@ -25,7 +25,16 @@ class AIClient:
             "Origin": "https://achuanai.vip",
             "Referer": "https://achuanai.vip/chat",
             "x-app-version": "2.14.0",
-            "priority": "u=1, i"
+            "priority": "u=1, i",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
+            "Sec-Ch-Ua": '"Microsoft Edge";v="143", "Chromium";v="143", "Not A(Brand";v="24"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin"
         }
 
     def create_session(self, model="gemini-3-pro-preview"):

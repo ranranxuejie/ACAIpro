@@ -69,6 +69,16 @@ def load_config():
     env_token = os.getenv("AI_CLIENT_TOKEN")
     if env_token:
         config["token"] = env_token
+    else:
+        # 从tokens.txt文件读取token，用于本地开发
+        try:
+            with open("tokens.txt", "r", encoding="utf-8") as f:
+                file_token = f.read().strip()
+                if file_token:
+                    config["token"] = file_token
+        except FileNotFoundError:
+            # 文件不存在，使用默认值
+            pass
     
     env_base_url = os.getenv("AI_CLIENT_BASE_URL")
     if env_base_url:
