@@ -274,7 +274,15 @@ class AIClient:
                             if isinstance(data_obj, dict) and data_obj.get("type") == "string":
                                 content = data_obj.get("data", "")
                                 yield content
-                            # 检查是否包含tokens信息
+                            # 检查是否包含object类型数据，从中提取completionTokens
+                            elif isinstance(data_obj, dict) and data_obj.get("type") == "object":
+                                # 保存tokens信息
+                                data = data_obj.get("data", {})
+                                # 优先使用completionTokens
+                                self.last_tokens_used = data.get("completionTokens", 0)
+                                # 保存完整数据，用于调试
+                                self.last_api_response = data_obj
+                            # 检查是否包含stats类型数据，保持兼容
                             elif isinstance(data_obj, dict) and data_obj.get("type") == "stats":
                                 # 保存tokens信息
                                 self.last_tokens_used = data_obj.get("data", {}).get("totalToken", 0)

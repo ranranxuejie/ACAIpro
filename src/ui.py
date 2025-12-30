@@ -731,11 +731,11 @@ def render_chat_area():
                         if main_content:
                             st.markdown(main_content)
                 
-                # 只在最新机器回复下方展示use tokens
-                if message["role"] == "assistant" and message == st.session_state.messages[-1]:
+                # 在每个AI回复下方展示completionTokens
+                if message["role"] == "assistant":
                     # 显示tokens使用信息
                     use_tokens = message.get("tokens", 0)
-                    st.caption(f"💡 使用tokens: {use_tokens}")
+                    st.caption(f"💡 Use Tokens : {use_tokens}")
 # 渲染输入区域
 def render_input_area():
     """
@@ -824,24 +824,24 @@ def handle_user_input(prompt, uploaded_file):
 
         # --- AI 消息处理 (流式) ---
         with st.chat_message("assistant"):
-            # 使用占位符实现流式响应
-            response_container = st.container()
+            # 使用单个占位符来容纳整个AI回答
+            response_placeholder = st.empty()
             full_response = ""
             
             # 迭代流式响应
             for chunk in st.session_state.bot.chat_stream(prompt, uploaded_file):
                 full_response += chunk
                 
-                # 清除之前的所有内容
-                response_container.empty()
+                # 处理AI回复，折叠<think>内容
+                from .utils import process_ai_content
+                main_content, think_content, is_thinking = process_ai_content(full_response)
                 
-                # 在容器中处理和显示内容
-                with response_container:
-                    # 处理AI回复，折叠<think>内容
-                    from .utils import process_ai_content
-                    main_content, think_content, is_thinking = process_ai_content(full_response)
-                    
-                    # 显示思考过程（如果有）
+                # 清除之前的内容
+                response_placeholder.empty()
+                
+                # 在占位符中创建一个容器，用于显示当前的AI回答
+                with response_placeholder.container():
+                    # 如果有思考内容，使用st.expander显示
                     if think_content or is_thinking:
                         with st.expander("查看思考过程"):
                             st.markdown(f"{think_content}{'...' if is_thinking else ''}")
@@ -861,7 +861,7 @@ def handle_user_input(prompt, uploaded_file):
         })
         
         # 显示tokens使用信息
-        st.caption(f"💡 使用tokens: {tokens_used}")
+        st.caption(f"💡 Use Tokens : {tokens_used}")
         
         # 自动滚动到聊天区域底部
         # 修改逻辑：直接滚动整个窗口到最底部，并添加延迟以确保内容渲染完毕
