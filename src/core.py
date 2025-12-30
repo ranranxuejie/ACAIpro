@@ -38,8 +38,22 @@ class AIClient:
         Returns:
             tuple: (成功状态, 消息或会话ID)
         """
+        # 从配置中获取对话参数
+        from .config import CONFIG
+        
         url = f"{self.base_url}/chat/session"
-        payload = {"model": model, "plugins": [], "mcp": []}
+        payload = {
+            "model": model, 
+            "plugins": [], 
+            "mcp": [],
+            "contextCount": CONFIG["contextCount"],
+            "frequencyPenalty": CONFIG["frequencyPenalty"],
+            "maxToken": CONFIG["maxToken"],
+            "presencePenalty": CONFIG["presencePenalty"],
+            "prompt": CONFIG["prompt"],
+            "temperature": CONFIG["temperature"],
+            "topSort": CONFIG["topSort"]
+        }
         try:
             response = requests.post(url, headers=self.headers, json=payload)
             if response.status_code == 200:
@@ -175,6 +189,29 @@ class AIClient:
             return False, f"HTTP {response.status_code}"
         except Exception as e:
             return False, str(e)
+    
+    def delete_session(self, session_id):
+        """
+        删除指定会话
+        
+        Args:
+            session_id (str): 要删除的会话ID
+            
+        Returns:
+            tuple: (成功状态, 消息)
+        """
+        url = f"{self.base_url}/chat/session/{session_id}"
+        try:
+            response = requests.delete(url, headers=self.headers)
+            if response.status_code == 200:
+                res_json = response.json()
+                if res_json.get("code") == 0:
+                    return True, "会话删除成功"
+                else:
+                    return False, res_json.get('msg')
+            return False, f"HTTP {response.status_code}"
+        except Exception as e:
+            return False, str(e)
 
     def chat_stream(self, user_text, file_obj=None):
         """
@@ -182,14 +219,17 @@ class AIClient:
         
         Args:
             user_text (str): 用户输入文本
-            file_obj: Streamlit上传文件对象
+            file_obj: 文件对象
             
         Yields:
             str: 流式生成的文本块
         """
         if not self.session_id:
-            yield "⚠️ 会话未连接，请检查 Token 并重试。"
+            yield "⚠️ 会话未连接，请先创建或选择会话！"
             return
+
+        # 初始化tokens信息
+        self.last_tokens_used = 0
 
         url = f"{self.base_url}/chat/completions"
 
@@ -199,10 +239,20 @@ class AIClient:
             if processed_file:
                 files_data.append(processed_file)
 
+        # 从配置中获取对话参数
+        from .config import CONFIG
+        
         payload = {
             "sessionId": self.session_id,
             "text": user_text,
-            "files": files_data
+            "files": files_data,
+            "contextCount": CONFIG["contextCount"],
+            "frequencyPenalty": CONFIG["frequencyPenalty"],
+            "maxToken": CONFIG["maxToken"],
+            "presencePenalty": CONFIG["presencePenalty"],
+            "prompt": CONFIG["prompt"],
+            "temperature": CONFIG["temperature"],
+            "topSort": CONFIG["topSort"]
         }
 
         stream_headers = self.headers.copy()
@@ -224,6 +274,10 @@ class AIClient:
                             if isinstance(data_obj, dict) and data_obj.get("type") == "string":
                                 content = data_obj.get("data", "")
                                 yield content
+                            # 检查是否包含tokens信息
+                            elif isinstance(data_obj, dict) and data_obj.get("type") == "stats":
+                                # 保存tokens信息
+                                self.last_tokens_used = data_obj.get("data", {}).get("totalToken", 0)
                         except:
                             continue
         except Exception as e:

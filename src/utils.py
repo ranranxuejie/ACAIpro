@@ -3,31 +3,47 @@
 # 处理AI回复，折叠<think>标签内容
 def process_ai_content(content):
     """
-    处理AI回复内容，将<think>...</think>标签内的内容折叠
+    处理AI回复内容，将<think>标签开始后的内容折叠
     
     Args:
         content (str): AI回复的原始内容
         
     Returns:
-        tuple: (处理后的主要内容, 思考内容)
+        tuple: (处理后的主要内容, 思考内容, 是否正在思考状态)
     """
-    import re
-    
-    # 使用正则表达式匹配<think>标签内容
-    pattern = r'<think>(.*?)</think>'
-    matches = re.findall(pattern, content, re.DOTALL)
-    
-    if matches:
-        # 提取<think>标签内容
-        think_content = matches[0]
-        # 提取主要内容（去除<think>标签）
-        main_content = re.sub(pattern, '', content, flags=re.DOTALL)
+    # 检查是否包含<think>标签
+    if '<think>' in content:
+        main_content = content
+        think_content = ""
+        is_thinking = False
         
-        # 返回处理后的内容和思考内容
-        return main_content.strip(), think_content.strip()
+        # 处理所有完整的<think>...</think>标签
+        while '<think>' in main_content and '</think>' in main_content:
+            think_start = main_content.find('<think>')
+            think_end = main_content.find('</think>')
+            
+            if think_end > think_start:
+                # 提取思考内容
+                think_content += main_content[think_start + 7:think_end] + "\n\n"
+                # 移除当前的<think>...</think>标签
+                main_content = main_content[:think_start] + main_content[think_end + 8:]
+            else:
+                break
+        
+        # 检查是否还有未结束的<think>标签
+        if '<think>' in main_content:
+            think_start = main_content.find('<think>')
+            # 提取未结束的思考内容
+            think_content += main_content[think_start + 7:]
+            # 移除未结束的<think>标签
+            main_content = main_content[:think_start]
+            is_thinking = True
+        
+        # 返回处理后的内容、思考内容和思考状态
+        return main_content.strip(), think_content.strip(), is_thinking
     else:
         # 没有<think>标签，返回原内容
-        return content, None
+        return content, None, False
 
 # 确保当前会话模型正确设置
 def ensure_current_model():

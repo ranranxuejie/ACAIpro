@@ -2,6 +2,7 @@
 import streamlit as st
 from .core import AIClient
 from .config import CONFIG
+from .file_utils import integrate_files_into_content
 
 # 初始化Session State
 def init_session_state():
@@ -25,7 +26,10 @@ def init_session_state():
     if "saved_api_token" not in st.session_state:
         st.session_state.saved_api_token = CONFIG["token"]
     if "remember_token" not in st.session_state:
-        st.session_state.remember_token = False
+        # 如果从CONFIG加载了token，默认记住token
+        st.session_state.remember_token = bool(CONFIG["token"])
+    if "useFiles" not in st.session_state:
+        st.session_state.useFiles = []  # 存储对话中涉及的所有文件
 
 # 渲染侧边栏
 def render_sidebar():
@@ -215,100 +219,165 @@ def render_sidebar():
                     session_id = session.get("id")
                     session_name = session.get("name", "未命名会话")
                     
-                    # 创建会话选择按钮
-                    if st.button(f"{session_name}", key=f"session_{session_id}", use_container_width=True):
-                        # 检查是否有有效token
-                        user_token = st.session_state.get("saved_api_token", CONFIG["token"])
-                        if not user_token:
-                            st.error("请先输入API Token！")
-                            continue
-                            
-                        # 设置当前会话ID
-                        if st.session_state.bot:
-                            # 确保bot实例使用正确的token
-                            st.session_state.bot.token = user_token
-                            st.session_state.bot.session_id = session_id
-                            
-                            # 自动选择当前会话的模型
-                            session_model = session.get("model", "gemini-3-pro-preview")
-                            st.session_state.selected_model = session_model
-                            st.session_state.current_session_model = session_model
-                            
-                            st.session_state.status = f"✅ 已切换到会话: {session_name}"
-                            # 清空当前聊天记录，因为切换了会话
-                            st.session_state.messages = []
-                            
-                            # 加载该会话的历史聊天记录
-                            success, data = st.session_state.bot.get_chat_records(session_id)
-                            if success:
-                                if data.get("records"):
-                                    # 将历史记录转换为消息格式
-                                    for record in reversed(data["records"]):
-                                        # 每条记录包含一个完整的对话回合
-                                        user_text = record.get("userText")
-                                        ai_text = record.get("aiText")
-                                        
-                                        # 添加用户消息
-                                        if user_text:
-                                            st.session_state.messages.append({
-                                                "role": "user",
-                                                "content": user_text
-                                            })
-                                        
-                                        # 添加AI回复
-                                        if ai_text:
-                                            st.session_state.messages.append({
-                                                "role": "assistant",
-                                                "content": ai_text
-                                            })
-                                    st.toast(f"已切换到会话: {session_name}，加载了 {len(data['records'])} 条历史记录", icon="✅")
+                    # 创建会话行，将删除选项与会话名称合并
+                    col1, col2 = st.columns([0.8, 0.2])
+                    
+                    with col1:
+                        # 创建会话选择按钮
+                        if st.button(f"{session_name}", key=f"session_{session_id}", use_container_width=True):
+                            # 检查是否有有效token
+                            user_token = st.session_state.get("saved_api_token", CONFIG["token"])
+                            if not user_token:
+                                st.error("请先输入API Token！")
+                                continue
+                                
+                            # 设置当前会话ID
+                            if st.session_state.bot:
+                                # 确保bot实例使用正确的token
+                                st.session_state.bot.token = user_token
+                                st.session_state.bot.session_id = session_id
+                                
+                                # 自动选择当前会话的模型
+                                session_model = session.get("model", "gemini-3-pro-preview")
+                                st.session_state.selected_model = session_model
+                                st.session_state.current_session_model = session_model
+                                
+                                st.session_state.status = f"✅ 已切换到会话: {session_name}"
+                                # 清空当前聊天记录，因为切换了会话
+                                st.session_state.messages = []
+                                
+                                # 加载该会话的历史聊天记录
+                                success, data = st.session_state.bot.get_chat_records(session_id)
+                                if success:
+                                    if data.get("records"):
+                                        # 将历史记录转换为消息格式
+                                        for record in reversed(data["records"]):
+                                            # 每条记录包含一个完整的对话回合
+                                            user_text = record.get("userText")
+                                            ai_text = record.get("aiText")
+                                            use_files = record.get("useFiles", [])
+                                            
+                                            # 确保use_files始终是一个可迭代对象
+                                            if use_files is None:
+                                                use_files = []
+                                            
+                                            # 添加用户消息
+                                            if user_text:
+                                                st.session_state.messages.append({
+                                                    "role": "user",
+                                                    "content": user_text,
+                                                    "tokens": record.get("useTokens", 0),
+                                                    "files": use_files,
+                                                    "file_name": record.get("fileName", "")
+                                                })
+                                            
+                                            # 添加AI回复（不包含文件信息）
+                                            if ai_text:
+                                                st.session_state.messages.append({
+                                                    "role": "assistant",
+                                                    "content": ai_text,
+                                                    "tokens": record.get("useTokens", 0)
+                                                })
+                                            
+                                            # 同时更新全局useFiles列表，避免重复
+                                            for file in use_files:
+                                                file_exists = any(existing_file.get("name") == file.get("name") for existing_file in st.session_state.useFiles)
+                                                if not file_exists:
+                                                    st.session_state.useFiles.append(file)
+                                        st.toast(f"已切换到会话: {session_name}，加载了 {len(data['records'])} 条历史记录", icon="✅")
+                                    else:
+                                        st.toast(f"已切换到会话: {session_name}，但没有历史记录", icon="✅")
                                 else:
-                                    st.toast(f"已切换到会话: {session_name}，但没有历史记录", icon="✅")
+                                    st.toast(f"加载历史记录失败: {data}", icon="❌")
+                                    st.toast(f"已切换到会话: {session_name}", icon="✅")
                             else:
-                                st.toast(f"加载历史记录失败: {data}", icon="❌")
-                                st.toast(f"已切换到会话: {session_name}", icon="✅")
-                        else:
-                            bot_instance = AIClient(user_token)
-                            bot_instance.session_id = session_id
-                            st.session_state.bot = bot_instance
-                            
-                            # 自动选择当前会话的模型
-                            session_model = session.get("model", "gemini-3-pro-preview")
-                            st.session_state.selected_model = session_model
-                            st.session_state.current_session_model = session_model
-                            
-                            st.session_state.status = f"✅ 已连接到会话: {session_name}"
-                            st.session_state.messages = []
-                            
-                            # 加载该会话的历史聊天记录
-                            success, data = bot_instance.get_chat_records(session_id)
-                            if success:
-                                if data.get("records"):
-                                    # 将历史记录转换为消息格式
-                                    for record in reversed(data["records"]):
-                                        # 每条记录包含一个完整的对话回合
-                                        user_text = record.get("userText")
-                                        ai_text = record.get("aiText")
-                                        
-                                        # 添加用户消息
-                                        if user_text:
-                                            st.session_state.messages.append({
-                                                "role": "user",
-                                                "content": user_text
-                                            })
-                                        
-                                        # 添加AI回复
-                                        if ai_text:
-                                            st.session_state.messages.append({
-                                                "role": "assistant",
-                                                "content": ai_text
-                                            })
-                                    st.toast(f"已连接到会话: {session_name}，加载了 {len(data['records'])} 条历史记录", icon="✅")
+                                bot_instance = AIClient(user_token)
+                                bot_instance.session_id = session_id
+                                st.session_state.bot = bot_instance
+                                
+                                # 自动选择当前会话的模型
+                                session_model = session.get("model", "gemini-3-pro-preview")
+                                st.session_state.selected_model = session_model
+                                st.session_state.current_session_model = session_model
+                                
+                                st.session_state.status = f"✅ 已连接到会话: {session_name}"
+                                st.session_state.messages = []
+                                
+                                # 加载该会话的历史聊天记录
+                                success, data = bot_instance.get_chat_records(session_id)
+                                if success:
+                                    if data.get("records"):
+                                        # 将历史记录转换为消息格式
+                                        for record in reversed(data["records"]):
+                                            # 每条记录包含一个完整的对话回合
+                                            user_text = record.get("userText")
+                                            ai_text = record.get("aiText")
+                                            use_files = record.get("useFiles", [])
+                                            
+                                            # 确保use_files始终是一个可迭代对象
+                                            if use_files is None:
+                                                use_files = []
+                                            
+                                            # 添加用户消息
+                                            if user_text:
+                                                st.session_state.messages.append({
+                                                    "role": "user",
+                                                    "content": user_text,
+                                                    "tokens": record.get("useTokens", 0),
+                                                    "files": use_files,
+                                                    "file_name": record.get("fileName", "")
+                                                })
+                                            
+                                            # 添加AI回复（不包含文件信息）
+                                            if ai_text:
+                                                st.session_state.messages.append({
+                                                    "role": "assistant",
+                                                    "content": ai_text,
+                                                    "tokens": record.get("useTokens", 0)
+                                                })
+                                            
+                                            # 同时更新全局useFiles列表，避免重复
+                                            for file in use_files:
+                                                file_exists = any(existing_file.get("name") == file.get("name") for existing_file in st.session_state.useFiles)
+                                                if not file_exists:
+                                                    st.session_state.useFiles.append(file)
+                                        st.toast(f"已连接到会话: {session_name}，加载了 {len(data['records'])} 条历史记录", icon="✅")
+                                    else:
+                                        st.toast(f"已连接到会话: {session_name}，但没有历史记录", icon="✅")
                                 else:
-                                    st.toast(f"已连接到会话: {session_name}，但没有历史记录", icon="✅")
-                            else:
-                                st.toast(f"加载历史记录失败: {data}", icon="❌")
-                                st.toast(f"已连接到会话: {session_name}", icon="✅")
+                                    st.toast(f"加载历史记录失败: {data}", icon="❌")
+                                    st.toast(f"已连接到会话: {session_name}", icon="✅")
+                    
+                    with col2:
+                        # 添加三个点按钮，点击后显示删除选项
+                        # 不使用key参数，避免API兼容性问题
+                        with st.popover("⋮"):
+                            if st.button(f"删除会话", key=f"delete_{session_id}", use_container_width=True, type="secondary"):
+                                # 直接执行删除会话逻辑，不再显示确认弹窗
+                                user_token = st.session_state.get("saved_api_token", CONFIG["token"])
+                                if not user_token:
+                                    st.error("请先输入API Token！")
+                                else:
+                                    # 创建bot实例进行删除操作
+                                    bot_instance = AIClient(user_token)
+                                    success, msg = bot_instance.delete_session(session_id)
+                                    if success:
+                                        # 重新加载会话列表
+                                        success, data = bot_instance.get_sessions()
+                                        if success:
+                                            # 更新会话列表
+                                            st.session_state.sessions = data
+                                            
+                                            # 触发侧边栏刷新状态
+                                            if "sidebar_refresh" not in st.session_state:
+                                                st.session_state.sidebar_refresh = 0
+                                            st.session_state.sidebar_refresh += 1
+                                            
+                                            st.toast(f"已删除会话: {session_name}", icon="✅")
+                                            # 刷新界面，确保侧边栏历史会话更新
+                                            st.rerun()
+                                    else:
+                                        st.toast(f"删除会话失败: {msg}", icon="❌")
             else:
                 st.info("暂无历史会话")
         
@@ -414,17 +483,32 @@ def render_sidebar():
                                 for record in reversed(records_data["records"]):
                                     user_text = record.get("userText")
                                     ai_text = record.get("aiText")
+                                    use_files = record.get("useFiles", [])
+                                    
+                                    # 确保use_files始终是一个可迭代对象，即使record.get返回None
+                                    if use_files is None:
+                                        use_files = []
                                     
                                     if user_text:
                                         st.session_state.messages.append({
                                             "role": "user",
-                                            "content": user_text
+                                            "content": user_text,
+                                            "tokens": record.get("useTokens", 0),
+                                            "files": use_files,  # 添加历史记录中的文件信息
+                                            "file_name": record.get("fileName", "")  # 兼容旧的文件名记录
                                         })
                                     if ai_text:
                                         st.session_state.messages.append({
                                             "role": "assistant",
-                                            "content": ai_text
+                                            "content": ai_text,
+                                            "tokens": record.get("useTokens", 0)
                                         })
+                                    
+                                    # 同时更新全局useFiles列表，避免重复
+                                    for file in use_files:
+                                        file_exists = any(existing_file.get("name") == file.get("name") for existing_file in st.session_state.useFiles)
+                                        if not file_exists:
+                                            st.session_state.useFiles.append(file)
                                 st.toast(f"已更新会话历史记录", icon="✅")
                         
                         # 强制刷新侧边栏，确保历史会话列表更新
@@ -441,18 +525,147 @@ def render_sidebar():
                     # 没有token变化时，不需要显示加载失败消息
                     pass
             else:
-                # 只有在没有token时，才清空会话列表
-                st.session_state.sessions = []
+                # 没有token时，只重置机器人实例和状态，不清空会话列表
                 st.session_state.bot = None
                 st.session_state.messages = []
                 st.session_state.status = "未连接"
-                st.toast("已清空会话列表", icon="ℹ️")
+            
+            # 初始化会话状态中的对话参数
+            if "chat_params" not in st.session_state:
+                st.session_state.chat_params = {
+                    "contextCount": CONFIG["contextCount"],
+                    "prompt": CONFIG["prompt"],
+                    "temperature": float(CONFIG["temperature"])
+                }
+            
+            # 上下文数量
+            st.session_state.chat_params["contextCount"] = st.slider(
+                "上下文数量",
+                min_value=1,
+                max_value=100,
+                value=int(st.session_state.chat_params["contextCount"]),
+                help="控制对话中使用的历史上下文数量"
+            )
+            
+            # 系统提示词
+            st.session_state.chat_params["prompt"] = st.text_area(
+                "系统提示词",
+                value=st.session_state.chat_params["prompt"],
+                height=100,
+                help="AI的系统提示词，指导AI的回复风格和行为"
+            )
+            
+            # 温度参数
+            st.session_state.chat_params["temperature"] = st.slider(
+                "温度",
+                min_value=0.0,
+                max_value=1.0,
+                step=0.1,
+                value=float(st.session_state.chat_params["temperature"]),
+                help="控制AI回复的随机性，值越高越随机"
+            )
+            
+            # 保存对话参数到配置
+            if st.button("保存对话参数", use_container_width=True):
+                # 更新CONFIG中的对话参数
+                CONFIG["contextCount"] = st.session_state.chat_params["contextCount"]
+                CONFIG["prompt"] = st.session_state.chat_params["prompt"]
+                CONFIG["temperature"] = st.session_state.chat_params["temperature"]
+                st.toast("对话参数已保存", icon="✅")
 
 # 渲染聊天区域
 def render_chat_area():
     """
     渲染聊天区域组件
     """
+    # 添加CSS样式定制用户对话框背景颜色、代码块高度和样式、输入框样式、侧边栏样式
+    st.markdown("""
+    <style>
+    /* 设置代码块样式 */
+    .stMarkdown pre {
+        max-height: 300px;
+        overflow-y: auto;
+        background-color: #181818 !important;
+    }
+    /* 设置代码块内文本颜色 */
+    .stMarkdown code {
+        background-color: #181818 !important;
+    }
+    /* 设置聊天输入框字体大小，比默认大一号 */
+    [data-testid='stChatInput'] textarea {
+        font-size: 1.2rem !important;
+        border-radius: 0.5rem !important;
+    }
+    /* 设置聊天输入框组件的圆角 - 全面覆盖所有容器 */
+
+    [data-testid='stChatInput'] > div:first-child {
+        border-radius: 0.8rem !important;
+        overflow: hidden !important;
+        min-height: 8rem !important;
+    }
+    [data-testid='stChatInput'] > div > div {
+        border-radius: 0.8rem !important;
+        overflow: hidden !important;
+    }
+    [data-testid='stChatInput'] [data-testid='stFileUploadDropzone'] {
+        border-radius: 0.8rem !important;
+    }
+    /* 设置聊天输入框按钮的圆角 */
+    [data-testid='stChatInput'] .stButton > button {
+        border-radius: 0.8rem !important;
+    }
+    /* 移除侧边栏所有元素的边缘线条 */
+    [data-testid='stSidebar'] * {
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+    }
+    /* 移除侧边栏选择框的边框 */
+    [data-testid='stSidebar'] .stSelectbox {
+        border: none !important;
+    }
+    /* 移除侧边栏按钮的边框 */
+    [data-testid='stSidebar'] .stButton > button {
+        border: none !important;
+    }
+    /* 移除侧边栏文本输入框的边框 */
+    [data-testid='stSidebar'] .stTextInput > div > div > input {
+        border: none !important;
+    }
+    /* 移除侧边栏展开器的边框 */
+    [data-testid='stSidebar'] .stExpander {
+        border: none !important;
+    }
+    /* 移除侧边栏容器的边框 */
+    [data-testid='stSidebar'] .stContainer {
+        border: none !important;
+    }
+    
+    /* 设置人类输入文本的样式 */
+    /* 根据实际DOM结构，使用aria-label识别用户消息 */
+    [data-testid="stChatMessage"]:has([aria-label="Chat message from user"]) {
+        background-color: #2F2F2F !important;
+        /* 靠右显示，宽度不超过2/3 */
+        margin-left: auto !important;
+        margin-right: 0 !important;
+        max-width: 66.67% !important;
+        /* 内部文本保持左对齐 */
+        text-align: left !important;
+        /* 头像靠右显示 - 使用flex布局反转 */
+        display: flex !important;
+        flex-direction: row-reverse !important;
+        align-items: flex-start !important;
+    }
+
+    /* 调整头像和内容之间的间距 */
+    [data-testid="stChatMessage"]:has([aria-label="Chat message from user"]) > div:first-child {
+        margin-left: 0.5rem !important;
+        margin-right: 0 !important;
+    }
+
+    </style>
+    """, unsafe_allow_html=True)
+    
     # 渲染历史聊天记录
     if not st.session_state.messages:
         # 空状态提示
@@ -463,28 +676,66 @@ def render_chat_area():
         with chat_container:
             for message in st.session_state.messages:
                 # 区分用户和AI的样式
-                avatar = "👤" if message["role"] == "user" else "🤖"
-                with st.chat_message(message["role"], avatar=avatar):
-                    if message["role"] == "assistant":
+                avatar = " " if message["role"] == "user" else " "
+                
+                # 显示消息内容
+                with st.chat_message(message["role"]):
+                    if message["role"] == "user":
+                        # 用户消息实现：显示部分内容+点击展开，超过50行时展开
+                        content = message["content"]
+                        
+                        # 使用file_utils模块格式化文件附件
+                        from .file_utils import format_file_attachments
+                        file_html = format_file_attachments(
+                            message.get("files", []),
+                            message.get("file_name"),
+                            message.get("file_url")
+                        )
+                        
+                        # 如果有文件附件，使用HTML显示
+                        if file_html:
+                            st.markdown(file_html, unsafe_allow_html=True)
+                            # 添加换行
+                            st.markdown("\n\n")
+                        
+                        # 定义显示的初始行数
+                        initial_lines = 50
+                        lines = content.split('\n')
+                        
+                        if len(lines) > initial_lines:
+                            # 显示前面的部分内容
+                            initial_content = '\n'.join(lines[:initial_lines])
+                            
+                            # 显示初始内容，使用st.text避免markdown渲染
+                            st.text(initial_content)
+                            
+                            # 使用st.expander实现点击展开
+                            with st.expander("... 展开查看完整消息"):
+                                # 显示完整消息，使用st.text避免markdown渲染
+                                st.text(content)
+                        else:
+                            # 短消息直接显示，使用st.text避免markdown渲染
+                            st.text(content)
+                    else:
+                        # AI消息使用默认样式
                         # 处理AI回复，折叠<think>内容
                         from .utils import process_ai_content
-                        main_content, think_content = process_ai_content(message["content"])
+                        main_content, think_content, _ = process_ai_content(message["content"])
                         
                         # 如果有思考内容，使用折叠面板显示
                         if think_content:
                             with st.expander("查看思考过程"):
                                 st.markdown(think_content)
                         
-                        # 显示主要内容
+                        # 显示主要内容 - 不限制高度
                         if main_content:
                             st.markdown(main_content)
-                    else:
-                        # 用户消息使用纯文本显示
-                        st.text(message["content"])
-                    
-                    # 显示附件信息
-                    if "file_name" in message and message["file_name"]:
-                        st.caption(f"📎 附件: {message['file_name']}")
+                
+                # 只在最新机器回复下方展示use tokens
+                if message["role"] == "assistant" and message == st.session_state.messages[-1]:
+                    # 显示tokens使用信息
+                    use_tokens = message.get("tokens", 0)
+                    st.caption(f"💡 使用tokens: {use_tokens}")
 # 渲染输入区域
 def render_input_area():
     """
@@ -493,10 +744,11 @@ def render_input_area():
     
     # 聊天输入框 - 支持文件上传，使用st.chat_input的accept_file参数
     chat_input = st.chat_input(
-        placeholder="输入您的问题...",
+        placeholder="询问任何问题",
         key="chat_input",
         accept_file=True,  # 支持上传文件
-        max_chars=None     # 无字符限制
+        max_chars=None,     # 无字符限制
+        accept_audio=True,  # 支持上传音频
     )
 
     # 处理用户输入
@@ -531,55 +783,110 @@ def handle_user_input(prompt, uploaded_file):
         # --- 用户消息处理 ---
         file_name_record = uploaded_file.name if uploaded_file else None
 
-        # 显示用户消息（纯文本格式）
-        with st.chat_message("user", avatar="👤"):
+        # 显示用户消息，将文件信息集成到对话内容中
+        with st.chat_message("user"):
+            # 使用file_utils模块格式化文件附件
+            from .file_utils import format_file_attachments
+            file_html = format_file_attachments([], file_name_record, f"{file_name_record}")
+            
+            # 如果有文件附件，使用HTML显示
+            if file_html:
+                st.markdown(file_html, unsafe_allow_html=True)
+                # 添加换行
+                st.markdown("\n\n")
+            
+            # 显示用户文本，使用st.text避免markdown渲染
             st.text(prompt)
-            if file_name_record:
-                st.caption(f"📎 已上传: {file_name_record}")
 
-        # 保存到历史
-        st.session_state.messages.append({
+        # 保存到历史 - 添加tokens属性
+        user_message = {
             "role": "user",
             "content": prompt,
-            "file_name": file_name_record
-        })
+            "file_name": file_name_record,
+            "tokens": 0,  # 默认值，实际值将从API获取
+            "files": []  # 存储当前消息相关的文件
+        }
+        
+        # 将文件信息添加到当前消息的files属性中
+        if file_name_record:
+            file_info = {
+                "name": file_name_record,
+                "url": "xxx"  # 实际应用中应该是文件的真实URL
+            }
+            user_message["files"].append(file_info)
+            
+            # 同时添加到全局useFiles列表，避免重复
+            file_exists = any(file.get("name") == file_name_record for file in st.session_state.useFiles)
+            if not file_exists:
+                st.session_state.useFiles.append(file_info)
+        
+        st.session_state.messages.append(user_message)
 
         # --- AI 消息处理 (流式) ---
-        with st.chat_message("assistant", avatar="🤖"):
+        with st.chat_message("assistant"):
             # 使用占位符实现流式响应
-            response_placeholder = st.empty()
+            response_container = st.container()
             full_response = ""
             
             # 迭代流式响应
             for chunk in st.session_state.bot.chat_stream(prompt, uploaded_file):
                 full_response += chunk
                 
-                # 处理AI回复，折叠<think>内容
-                from .utils import process_ai_content
-                main_content, think_content = process_ai_content(full_response)
+                # 清除之前的所有内容
+                response_container.empty()
                 
-                # 生成显示内容
-                display_content = ""
-                
-                # 如果有思考内容，使用折叠面板显示
-                if think_content:
-                    display_content += f"""
-<details>
-  <summary>查看思考过程</summary>
-  <div>
-    {think_content}
-  </div>
-</details>
-                    """
-                
-                # 添加主要内容
-                display_content += main_content
-                
-                # 更新占位符内容
-                response_placeholder.markdown(display_content)
+                # 在容器中处理和显示内容
+                with response_container:
+                    # 处理AI回复，折叠<think>内容
+                    from .utils import process_ai_content
+                    main_content, think_content, is_thinking = process_ai_content(full_response)
+                    
+                    # 显示思考过程（如果有）
+                    if think_content or is_thinking:
+                        with st.expander("查看思考过程"):
+                            st.markdown(f"{think_content}{'...' if is_thinking else ''}")
+                    
+                    # 显示主要内容
+                    if main_content:
+                        st.markdown(main_content)
 
-        # 保存 AI 回复到历史
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        # 获取tokens使用信息
+        tokens_used = getattr(st.session_state.bot, 'last_tokens_used', 0)
+        
+        # 保存 AI 回复到历史 - 添加tokens属性，不包含文件信息
+        st.session_state.messages.append({
+            "role": "assistant", 
+            "content": full_response,
+            "tokens": tokens_used  # 使用实际获取的tokens值
+        })
+        
+        # 显示tokens使用信息
+        st.caption(f"💡 使用tokens: {tokens_used}")
+        
+        # 自动滚动到聊天区域底部
+        # 修改逻辑：直接滚动整个窗口到最底部，并添加延迟以确保内容渲染完毕
+        st.markdown("""
+        <script>
+            function scrollToBottom() {
+                // 获取文档的高度
+                const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
+                // 滚动到最底部
+                window.scrollTo({
+                    top: scrollHeight,
+                    behavior: "smooth"
+                });
+            }
+
+            // 立即执行一次
+            scrollToBottom();
+
+            // 延迟执行，确保 Streamlit 重新渲染 DOM（如 Markdown 解析、代码块高亮）完成后再次滚动
+            // 设置多个时间点以应对不同长度内容的渲染耗时
+            setTimeout(scrollToBottom, 100);
+            setTimeout(scrollToBottom, 300);
+            setTimeout(scrollToBottom, 500);
+        </script>
+        """, unsafe_allow_html=True)
 
 # 自动加载模型列表和会话
 def auto_load_data():
@@ -656,12 +963,14 @@ def auto_load_data():
                                 if user_text:
                                     st.session_state.messages.append({
                                         "role": "user",
-                                        "content": user_text
+                                        "content": user_text,
+                                        "tokens": record.get("useTokens", 0)
                                     })
                                 if ai_text:
                                     st.session_state.messages.append({
                                         "role": "assistant",
-                                        "content": ai_text
+                                        "content": ai_text,
+                                        "tokens": record.get("useTokens", 0)
                                     })
             else:
                 # 会话列表为空时，初始化bot
