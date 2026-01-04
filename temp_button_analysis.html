@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>操作按钮组分析</title>
+    <style>
+        .analysis-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .code-block {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+        .structure-tree {
+            background-color: #e8f4f8;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .function-description {
+            background-color: #f8f0e8;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        h2 {
+            color: #333;
+        }
+        h3 {
+            color: #555;
+        }
+        ul {
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="analysis-container">
+        <h1>操作按钮组分析</h1>
+        
+        <h2>1. 原始HTML结构</h2>
+        <div class="code-block">
+<pre>&lt;div class="z-0 flex min-h-[46px] justify-start"&gt;
+  &lt;div class="touch:-me-2 touch:-ms-3.5 -ms-2.5 -me-1 flex flex-wrap items-center gap-y-4 p-1 select-none touch:w-[calc(100%+--spacing(3.5))] -mt-1 w-[calc(100%+--spacing(2.5))] duration-[1.5s] focus-within:transition-none hover:transition-none touch:pointer-events-auto pointer-events-none [mask-image:linear-gradient(to_right,black_33%,transparent_66%)] [mask-size:300%_100%] [mask-position:100%_0%] motion-safe:transition-[mask-position] group-hover/turn-messages:pointer-events-auto group-hover/turn-messages:[mask-position:0_0] group-focus-within/turn-messages:pointer-events-auto group-focus-within/turn-messages:[mask-position:0_0] has-data-[state=open]:pointer-events-auto has-data-[state=open]:[mask-position:0_0]"&gt;
+    &lt;button class="text-token-text-secondary hover:bg-token-bg-secondary rounded-lg" aria-label="复制" aria-pressed="false" data-testid="copy-turn-action-button" data-state="closed"&gt;
+      &lt;span class="flex items-center justify-center touch:w-10 h-8 w-8"&gt;
+        &lt;svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="icon"&gt;
+          &lt;use href="/cdn/assets/sprites-core-i9agxugi.svg#ce3544" fill="currentColor"&gt;&lt;/use&gt;
+        &lt;/svg&gt;
+      &lt;/span&gt;
+    &lt;/button&gt;
+    &lt;button class="text-token-text-secondary hover:bg-token-bg-secondary rounded-lg" aria-label="喜欢" aria-pressed="false" data-testid="good-response-turn-action-button" data-state="closed"&gt;
+      &lt;span class="flex items-center justify-center touch:w-10 h-8 w-8"&gt;
+        &lt;svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="icon"&gt;
+          &lt;use href="/cdn/assets/sprites-core-i9agxugi.svg#51753c" fill="currentColor"&gt;&lt;/use&gt;
+        &lt;/svg&gt;
+      &lt;/span&gt;
+    &lt;/button&gt;
+    &lt;button class="text-token-text-secondary hover:bg-token-bg-secondary rounded-lg" aria-label="不喜欢" aria-pressed="false" data-testid="bad-response-turn-action-button" data-state="closed"&gt;
+      &lt;span class="flex items-center justify-center touch:w-10 h-8 w-8"&gt;
+        &lt;svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="icon"&gt;
+          &lt;use href="/cdn/assets/sprites-core-i9agxugi.svg#2126ae" fill="currentColor"&gt;&lt;/use&gt;
+        &lt;/svg&gt;
+      &lt;/span&gt;
+    &lt;/button&gt;
+    &lt;button class="text-token-text-secondary hover:bg-token-bg-secondary rounded-lg" aria-label="分享" aria-pressed="false" data-state="closed"&gt;
+      &lt;span class="flex items-center justify-center touch:w-10 h-8 w-8"&gt;
+        &lt;svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="icon"&gt;
+          &lt;use href="/cdn/assets/sprites-core-i9agxugi.svg#630ca2" fill="currentColor"&gt;&lt;/use&gt;
+        &lt;/svg&gt;
+      &lt;/span&gt;
+    &lt;/button&gt;
+    &lt;span class="" data-state="closed"&gt;
+      &lt;button type="button" id="radix-_r_61_" aria-haspopup="menu" aria-expanded="false" data-state="closed" class="cursor-pointer text-token-text-secondary hover:bg-token-bg-secondary touch:px-2.5 h-[30px] rounded-md px-1.5" aria-label="切换模型"&gt;
+        &lt;div class="flex items-center"&gt;
+          &lt;svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="icon"&gt;
+            &lt;use href="/cdn/assets/sprites-core-i9agxugi.svg#ec66f0" fill="currentColor"&gt;&lt;/use&gt;
+          &lt;/svg&gt;
+        &lt;/div&gt;
+      &lt;/button&gt;
+    &lt;/span&gt;
+    &lt;button class="text-token-text-secondary hover:bg-token-bg-secondary touch:w-10 flex h-8 w-8 items-center justify-center rounded-lg" aria-label="更多操作" type="button" id="radix-_r_64_" aria-haspopup="menu" aria-expanded="false" data-state="closed"&gt;
+      &lt;svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="icon"&gt;
+        &lt;use href="/cdn/assets/sprites-core-i9agxugi.svg#f6d0e2" fill="currentColor"&gt;&lt;/use&gt;
+      &lt;/svg&gt;
+    &lt;/button&gt;
+  &lt;/div&gt;
+&lt;/div&gt;</

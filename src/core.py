@@ -48,7 +48,7 @@ class AIClient:
             tuple: (成功状态, 消息或会话ID)
         """
         # 从配置中获取对话参数
-        from .config import CONFIG
+        from config import CONFIG
         
         url = f"{self.base_url}/chat/session"
         payload = {
@@ -248,9 +248,7 @@ class AIClient:
             if processed_file:
                 files_data.append(processed_file)
 
-        # 从配置中获取对话参数
-        from .config import CONFIG
-        
+
         payload = {
             "sessionId": self.session_id,
             "text": user_text,
