@@ -47,9 +47,7 @@ class AIClient:
         Returns:
             tuple: (成功状态, 消息或会话ID)
         """
-        # 从配置中获取对话参数
-        from config import CONFIG
-        
+
         url = f"{self.base_url}/chat/session"
         payload = {
             "model": model, 
