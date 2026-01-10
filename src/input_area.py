@@ -1,8 +1,11 @@
 # 输入区域模块 - 处理聊天输入和用户输入处理
 import streamlit as st
+import re
 from .core import AIClient
 from .utils import process_ai_content
 from .file_utils import format_file_attachments
+from .styles import apply_global_styles
+from st_copy import copy_button
 
 # 渲染输入区域
 def render_input_area():
@@ -44,6 +47,20 @@ def handle_user_input(prompt, uploaded_file):
         prompt (str): 用户输入的文本
         uploaded_file: 用户上传的文件对象
     """
+    # 应用共享样式
+    apply_global_styles()
+    
+    # 清洗 AI 文本的辅助函数
+    def clean_ai_text(text):
+        """
+        清洗 AI 文本：移除 <think> 及其内容，re.DOTALL 让 . 能匹配换行符
+        """
+        pattern = r"<think>[\s\S]*?</think>"
+        # 替换为空字符串
+        cleaned_text = re.sub(pattern, "", text, flags=re.DOTALL)
+        # 去除首尾多余空格
+        return cleaned_text.strip()
+    
     # 检查是否连接
     if not st.session_state.bot:
         st.error("请先连接会话！")
@@ -54,7 +71,11 @@ def handle_user_input(prompt, uploaded_file):
         # 显示用户消息，将文件信息集成到对话内容中
         with st.chat_message("user"):
             # 使用file_utils模块格式化文件附件
-            file_html = format_file_attachments([], file_name_record, f"{file_name_record}")
+            file_html = format_file_attachments(
+                [], 
+                file_name_record, 
+                f"{file_name_record}" if file_name_record else ""
+            )
             
             # 如果有文件附件，使用HTML显示
             if file_html:
@@ -62,8 +83,46 @@ def handle_user_input(prompt, uploaded_file):
                 # 添加换行
                 st.markdown("\n\n")
             
-            # 显示用户文本，使用st.text避免markdown渲染
+            # 直接显示完整消息，使用st.text避免markdown渲染
             st.text(prompt)
+            
+            # 操作按钮组
+            # 调整列宽：给 action_col2 更多空间 (0.9)，因为它要放三个标签
+            action_col1, action_col2 = st.columns([0.1, 0.9], vertical_alignment="center")
+            
+            # 1. 复制按钮
+            with action_col1:
+                # 使用copy_button组件
+                copy_button(prompt)
+            
+            # 2. 信息标签组 (Tokens | 时间 | 模型)
+            with action_col2:
+                # 获取数据
+                use_tokens = 0
+                updated_time = ""
+                model = ""
+                
+                # 创建标签HTML
+                badges_html = f"""
+                <div style="display: flex; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <!-- Token 标签 (红色风格) -->
+                    <div style="background-color: rgba(255, 75, 75, 0.15); color: #ff4b4b; border: 0px solid rgba(255, 75, 75, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap;">
+                        💡 {use_tokens} Tokens
+                    </div>
+                    
+                    <!-- 时间 标签 (绿色风格) -->
+                    <div style="background-color: rgba(33, 195, 84, 0.15); color: #21c354; border: 0px solid rgba(33, 195, 84, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap;">
+                        ⏰ {updated_time}
+                    </div>
+                    
+                    <!-- 模型 标签 (蓝色风格) -->
+                    <div style="background-color: rgba(0, 104, 201, 0.15); color: #0068c9; border: 0px solid rgba(0, 104, 201, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap;">
+                        🤖 {model}
+                    </div>
+                </div>
+                """
+                
+                st.html(badges_html)
 
         # 保存到历史 - 添加tokens属性
         user_message = {
@@ -115,6 +174,46 @@ def handle_user_input(prompt, uploaded_file):
                     # 显示主要内容
                     if main_content:
                         st.markdown(main_content)
+            
+            # 操作按钮组 - 只在最终回复时显示
+            # 调整列宽：给 action_col2 更多空间 (0.9)，因为它要放三个标签
+            action_col1, action_col2 = st.columns([0.1, 0.9], vertical_alignment="center")
+            
+            # 1. 复制按钮
+            with action_col1:
+                # 准备要复制的纯净文本
+                text_to_copy = clean_ai_text(full_response)
+                # 使用copy_button组件
+                copy_button(text_to_copy)
+            
+            # 2. 信息标签组 (Tokens | 时间 | 模型)
+            with action_col2:
+                # 获取数据
+                tokens_used = getattr(st.session_state.bot, 'last_tokens_used', 0)
+                updated_time = ""
+                model = ""
+                
+                # 创建标签HTML
+                badges_html = f"""
+                <div style="display: flex; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <!-- Token 标签 (红色风格) -->
+                    <div style="background-color: rgba(255, 75, 75, 0.15); color: #ff4b4b; border: 0px solid rgba(255, 75, 75, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap;">
+                        💡 {tokens_used} Tokens
+                    </div>
+                    
+                    <!-- 时间 标签 (绿色风格) -->
+                    <div style="background-color: rgba(33, 195, 84, 0.15); color: #21c354; border: 0px solid rgba(33, 195, 84, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap;">
+                        ⏰ {updated_time}
+                    </div>
+                    
+                    <!-- 模型 标签 (蓝色风格) -->
+                    <div style="background-color: rgba(0, 104, 201, 0.15); color: #0068c9; border: 0px solid rgba(0, 104, 201, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap;">
+                        🤖 {model}
+                    </div>
+                </div>
+                """
+                
+                st.html(badges_html)
 
         # 获取tokens使用信息
         tokens_used = getattr(st.session_state.bot, 'last_tokens_used', 0)
@@ -123,11 +222,9 @@ def handle_user_input(prompt, uploaded_file):
         st.session_state.messages.append({
             "role": "assistant", 
             "content": full_response,
-            "tokens": tokens_used  # 使用实际获取的tokens值
+            "tokens": tokens_used,  # 使用实际获取的tokens值
+            "useTokens": tokens_used  # 保持与API返回格式一致
         })
-        
-        # 显示tokens使用信息
-        st.caption(f"💡 Use Tokens : {tokens_used}")
         
         # 自动滚动到聊天区域底部
         # 修改逻辑：直接滚动整个窗口到最底部，并添加延迟以确保内容渲染完毕
