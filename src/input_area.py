@@ -1,11 +1,53 @@
 # 输入区域模块 - 处理聊天输入和用户输入处理
 import streamlit as st
 import re
+from datetime import datetime
 from .core import AIClient
 from .utils import process_ai_content
 from .file_utils import format_file_attachments
 from .styles import apply_global_styles
 from st_copy import copy_button
+# 辅助函数：生成徽章 HTML
+def render_badges(tokens=0, time_str="", model_name=""):
+    """
+    生成底部的元数据徽章 HTML
+    """
+    # 如果 tokens 为 0 或 None，不显示 Token 徽章
+    token_html = ""
+    if tokens:
+        token_html = f"""
+        <div style="background-color: rgba(255, 75, 75, 0.15); color: #ff4b4b; border: 0px solid rgba(255, 75, 75, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; display: flex; align-items: center;">
+            <span style="margin-right: 4px;">💡</span> {tokens}
+        </div>
+        """
+    
+    # 如果时间为空，也不显示时间徽章（或者显示占位符）
+    time_html = ""
+    if time_str:
+         time_html = f"""
+        <div style="background-color: rgba(33, 195, 84, 0.15); color: #21c354; border: 0px solid rgba(33, 195, 84, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; display: flex; align-items: center;">
+            <span style="margin-right: 4px;">⏰</span> {time_str}
+        </div>
+        """
+
+    return f"""
+    <div style="display: flex; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px;">
+        {token_html}
+        {time_html}
+        <!-- 模型 标签 (蓝色风格) -->
+        <div style="background-color: rgba(0, 104, 201, 0.15); color: #0068c9; border: 0px solid rgba(0, 104, 201, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; display: flex; align-items: center;">
+            <span style="margin-right: 4px;">🤖</span> {model_name}
+        </div>
+    </div>
+    """
+# 清洗 AI 文本的辅助函数
+def clean_ai_text(text):
+    """
+    清洗 AI 文本：移除 think 标签
+    """
+    pattern = r""
+    cleaned_text = re.sub(pattern, "", text, flags=re.DOTALL)
+    return cleaned_text.strip()
 
 # 渲染输入区域
 def render_input_area():
@@ -13,240 +55,169 @@ def render_input_area():
     渲染输入区域组件
     """
     
-    # 聊天输入框 - 支持文件上传，使用st.chat_input的accept_file参数
     chat_input = st.chat_input(
-        placeholder="询问任何问题",
+        placeholder="询问任何问题...",
         key="chat_input",
-        accept_file=True,  # 支持上传文件
-        max_chars=None,     # 无字符限制
-        accept_audio=True,  # 支持上传音频
+        accept_file=True,
+        max_chars=None,
+        accept_audio=True,
     )
 
-    # 处理用户输入
     if chat_input:
-        # 获取文本内容
         prompt = chat_input.get("text", "")
-        
-        # 获取上传的文件
         uploaded_files = chat_input.get("files", [])
         uploaded_file = uploaded_files[0] if uploaded_files else None
         
-        # 显示上传文件信息
         if uploaded_file:
             st.toast(f"已上传文件: {uploaded_file.name}", icon="✅")
         
-        # 调用处理函数
         handle_user_input(prompt, uploaded_file)
-
 # 处理用户输入
 def handle_user_input(prompt, uploaded_file):
     """
     处理用户输入
-    
-    Args:
-        prompt (str): 用户输入的文本
-        uploaded_file: 用户上传的文件对象
     """
-    # 应用共享样式
     apply_global_styles()
     
-    # 清洗 AI 文本的辅助函数
-    def clean_ai_text(text):
-        """
-        清洗 AI 文本：移除 <think> 及其内容，re.DOTALL 让 . 能匹配换行符
-        """
-        pattern = r"<think>[\s\S]*?</think>"
-        # 替换为空字符串
-        cleaned_text = re.sub(pattern, "", text, flags=re.DOTALL)
-        # 去除首尾多余空格
-        return cleaned_text.strip()
-    
-    # 检查是否连接
     if not st.session_state.bot:
         st.error("请先连接会话！")
-    else:
-        # --- 用户消息处理 ---
-        file_name_record = uploaded_file.name if uploaded_file else None
+        return
 
-        # 显示用户消息，将文件信息集成到对话内容中
-        with st.chat_message("user"):
-            # 使用file_utils模块格式化文件附件
-            file_html = format_file_attachments(
-                [], 
-                file_name_record, 
-                f"{file_name_record}" if file_name_record else ""
-            )
-            
-            # 如果有文件附件，使用HTML显示
-            if file_html:
-                st.markdown(file_html, unsafe_allow_html=True)
-                # 添加换行
-                st.markdown("\n\n")
-            
-            # 直接显示完整消息，使用st.text避免markdown渲染
-            st.text(prompt)
-            
-            # 操作按钮组
-            # 调整列宽：给 action_col2 更多空间 (0.9)，因为它要放三个标签
-            action_col1, action_col2 = st.columns([0.1, 0.9], vertical_alignment="center")
-            
-            # 1. 复制按钮
-            with action_col1:
-                # 使用copy_button组件
-                copy_button(prompt)
-            
-            # 2. 信息标签组 (Tokens | 时间 | 模型)
-            with action_col2:
-                # 获取数据
-                use_tokens = 0
-                updated_time = ""
-                model = ""
-                
-                # 创建标签HTML
-                badges_html = f"""
-                <div style="display: flex; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap;">
-                    <!-- Token 标签 (红色风格) -->
-                    <div style="background-color: rgba(255, 75, 75, 0.15); color: #ff4b4b; border: 0px solid rgba(255, 75, 75, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap;">
-                        💡 {use_tokens} Tokens
-                    </div>
-                    
-                    <!-- 时间 标签 (绿色风格) -->
-                    <div style="background-color: rgba(33, 195, 84, 0.15); color: #21c354; border: 0px solid rgba(33, 195, 84, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap;">
-                        ⏰ {updated_time}
-                    </div>
-                    
-                    <!-- 模型 标签 (蓝色风格) -->
-                    <div style="background-color: rgba(0, 104, 201, 0.15); color: #0068c9; border: 0px solid rgba(0, 104, 201, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap;">
-                        🤖 {model}
-                    </div>
-                </div>
-                """
-                
-                st.html(badges_html)
+    # 获取当前模型名称
+    current_model = st.session_state.get("current_session_model", "Unknown")
+    # 临时本地时间（在API返回前显示）
+    temp_time = datetime.now().strftime("%H:%M:%S")
 
-        # 保存到历史 - 添加tokens属性
-        user_message = {
-            "role": "user",
-            "content": prompt,
-            "file_name": file_name_record,
-            "tokens": 0,  # 默认值，实际值将从API获取
-            "files": []  # 存储当前消息相关的文件
-        }
+    # --- 用户消息处理 ---
+    file_name_record = uploaded_file.name if uploaded_file else None
+
+    with st.chat_message("user"):
+        # 文件显示逻辑
+        file_html = format_file_attachments([], file_name_record, f"{file_name_record}" if file_name_record else "")
+        if file_html:
+            st.markdown(file_html, unsafe_allow_html=True)
+            st.markdown("\n\n")
         
-        # 将文件信息添加到当前消息的files属性中
-        if file_name_record:
-            file_info = {
-                "name": file_name_record,
-                "url": "xxx"  # 实际应用中应该是文件的真实URL
-            }
-            user_message["files"].append(file_info)
-            
-            # 同时添加到全局useFiles列表，避免重复
-            file_exists = any(file.get("name") == file_name_record for file in st.session_state.useFiles)
-            if not file_exists:
-                st.session_state.useFiles.append(file_info)
+        st.text(prompt)
         
-        st.session_state.messages.append(user_message)
+        # 操作按钮和信息标签
+        action_col1, action_col2 = st.columns([0.08, 0.92], vertical_alignment="center")
+        
+        with action_col1:
+            copy_button(prompt)
+        
+        with action_col2:
+            # 1. 创建用户徽章的占位符
+            user_badges_placeholder = st.empty()
+            # 2. 初始渲染（使用本地时间，Tokens=0）
+            user_badges_placeholder.html(render_badges(tokens=0, time_str=temp_time, model_name=current_model))
 
-        # --- AI 消息处理 (流式) ---
-        with st.chat_message("assistant"):
-            # 使用单个占位符来容纳整个AI回答
-            response_placeholder = st.empty()
-            full_response = ""
-            
-            # 迭代流式响应
+    # --- AI 消息处理 (流式) ---
+    with st.chat_message("assistant"):
+        response_placeholder = st.empty()
+        full_response = ""
+        
+        # 3. 创建 AI 徽章的占位符
+        ai_badges_placeholder = st.empty()
+        
+        # 迭代流式响应
+        try:
             for chunk in st.session_state.bot.chat_stream(prompt, uploaded_file):
                 full_response += chunk
-                
-                # 处理AI回复，折叠<think>内容
                 main_content, think_content, is_thinking = process_ai_content(full_response)
                 
-                # 清除之前的内容
                 response_placeholder.empty()
-                
-                # 在占位符中创建一个容器，用于显示当前的AI回答
                 with response_placeholder.container():
-                    # 如果有思考内容，使用st.expander显示
                     if think_content or is_thinking:
-                        with st.expander("查看思考过程"):
+                        status_label = "🤔 思考中..." if is_thinking else "💡 思考过程"
+                        with st.expander(status_label, expanded=is_thinking):
                             st.markdown(f"{think_content}{'...' if is_thinking else ''}")
-                    
-                    # 显示主要内容
                     if main_content:
                         st.markdown(main_content)
             
-            # 操作按钮组 - 只在最终回复时显示
-            # 调整列宽：给 action_col2 更多空间 (0.9)，因为它要放三个标签
-            action_col1, action_col2 = st.columns([0.1, 0.9], vertical_alignment="center")
+            # --- 流式结束后的数据更新逻辑 ---
             
-            # 1. 复制按钮
+            # 1. 获取 Core 中保存的完整元数据
+            metadata = getattr(st.session_state.bot, 'last_chat_metadata', {})
+            
+            # 2. 提取 Tokens
+            final_tokens = metadata.get("completionTokens", 0)
+            
+            # 3. 提取并格式化时间 (使用 'updated' 字段，格式如 "2026-01-13 17:19:50")
+            api_time_str = metadata.get("updated", "")
+            final_time = temp_time # 默认回退
+            if api_time_str and " " in api_time_str:
+                try:
+                    # 截取 HH:MM:SS 部分
+                    final_time = api_time_str.split(" ")[1]
+                except:
+                    pass
+            
+            # 4. 更新 AI 的操作栏和徽章
+            # 显示复制按钮
+            action_col1, action_col2 = st.columns([0.08, 0.92], vertical_alignment="center")
             with action_col1:
-                # 准备要复制的纯净文本
                 text_to_copy = clean_ai_text(full_response)
-                # 使用copy_button组件
                 copy_button(text_to_copy)
             
-            # 2. 信息标签组 (Tokens | 时间 | 模型)
             with action_col2:
-                # 获取数据
-                tokens_used = getattr(st.session_state.bot, 'last_tokens_used', 0)
-                updated_time = ""
-                model = ""
-                
-                # 创建标签HTML
-                badges_html = f"""
-                <div style="display: flex; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap;">
-                    <!-- Token 标签 (红色风格) -->
-                    <div style="background-color: rgba(255, 75, 75, 0.15); color: #ff4b4b; border: 0px solid rgba(255, 75, 75, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap;">
-                        💡 {tokens_used} Tokens
-                    </div>
-                    
-                    <!-- 时间 标签 (绿色风格) -->
-                    <div style="background-color: rgba(33, 195, 84, 0.15); color: #21c354; border: 0px solid rgba(33, 195, 84, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap;">
-                        ⏰ {updated_time}
-                    </div>
-                    
-                    <!-- 模型 标签 (蓝色风格) -->
-                    <div style="background-color: rgba(0, 104, 201, 0.15); color: #0068c9; border: 0px solid rgba(0, 104, 201, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap;">
-                        🤖 {model}
-                    </div>
-                </div>
-                """
-                
-                st.html(badges_html)
+                # 渲染最终的 AI 徽章（包含真实Tokens和API时间）
+                # 注意：这里我们覆盖之前的占位符，其实可以直接在这里显示，
+                # 但为了布局一致，还是把 badges 放在 col2 里，
+                # 上面定义的 ai_badges_placeholder 其实可以用作加载中的占位，或者直接不使用占位符，在最后渲染。
+                # 考虑到 columns 的作用域，这里直接在 col2 渲染是最好的。
+                st.html(render_badges(tokens=final_tokens, time_str=final_time, model_name=current_model))
 
-        # 获取tokens使用信息
-        tokens_used = getattr(st.session_state.bot, 'last_tokens_used', 0)
-        
-        # 保存 AI 回复到历史 - 添加tokens属性，不包含文件信息
-        st.session_state.messages.append({
-            "role": "assistant", 
-            "content": full_response,
-            "tokens": tokens_used,  # 使用实际获取的tokens值
-            "useTokens": tokens_used  # 保持与API返回格式一致
-        })
-        
-        # 自动滚动到聊天区域底部
-        # 修改逻辑：直接滚动整个窗口到最底部，并添加延迟以确保内容渲染完毕
-        st.markdown("""
-        <script>
-            function scrollToBottom() {
-                // 获取文档的高度
-                const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
-                // 滚动到最底部
-                window.scrollTo({
-                    top: scrollHeight,
-                    behavior: "smooth"
-                });
-            }
+            # 5. 回填更新 用户 的徽章 (关键步骤)
+            # 使用真实的时间戳更新用户消息的徽章
+            user_badges_placeholder.html(render_badges(tokens=0, time_str=final_time, model_name=current_model))
 
-            // 立即执行一次
-            scrollToBottom();
+        except Exception as e:
+            st.error(f"生成回复时出错: {str(e)}")
+            final_tokens = 0
+            final_time = temp_time
 
-            // 延迟执行，确保 Streamlit 重新渲染 DOM（如 Markdown 解析、代码块高亮）完成后再次滚动
-            // 设置多个时间点以应对不同长度内容的渲染耗时
-            setTimeout(scrollToBottom, 100);
-            setTimeout(scrollToBottom, 300);
-            setTimeout(scrollToBottom, 500);
-        </script>
-        """, unsafe_allow_html=True)
+    # --- 保存历史记录 ---
+    
+    # 保存用户消息 (包含文件信息)
+    user_message = {
+        "role": "user",
+        "content": prompt,
+        "file_name": file_name_record,
+        "tokens": 0,
+        "files": [],
+        "timestamp": final_time # 保存时间以便历史记录显示
+    }
+    
+    if file_name_record:
+        file_info = {"name": file_name_record, "url": ""}
+        user_message["files"].append(file_info)
+        if "useFiles" not in st.session_state:
+            st.session_state.useFiles = []
+        file_exists = any(file.get("name") == file_name_record for file in st.session_state.useFiles)
+        if not file_exists:
+            st.session_state.useFiles.append(file_info)
+    
+    st.session_state.messages.append(user_message)
+
+    # 保存 AI 消息 (包含真实的 tokens)
+    st.session_state.messages.append({
+        "role": "assistant", 
+        "content": full_response,
+        "tokens": final_tokens,
+        "useTokens": final_tokens,
+        "timestamp": final_time # 保存时间
+    })
+    
+    # 自动滚动脚本
+    st.markdown("""
+    <script>
+        function scrollToBottom() {
+            const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
+            window.scrollTo({top: scrollHeight, behavior: "smooth"});
+        }
+        scrollToBottom();
+        setTimeout(scrollToBottom, 100);
+        setTimeout(scrollToBottom, 300);
+    </script>
+    """, unsafe_allow_html=True)

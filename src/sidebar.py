@@ -2,585 +2,375 @@
 import streamlit as st
 from .core import AIClient
 from .config import CONFIG
+from datetime import datetime
 
-# 渲染侧边栏
-def render_sidebar():
+# --- 辅助逻辑函数 ---
+
+def get_session_group(timestamp_str, is_pinned=False):
     """
-    渲染侧边栏组件
+    解析时间并返回分组名称
+    如果 is_pinned 为 True，强制返回 '已置顶'
     """
-    with st.sidebar:
-        # 模型选择 - 移动到侧边栏，支持二级分类
-        if st.session_state.models and st.session_state.bot:
-            # 直接使用模型的value值作为显示文本
-            model_values = [model.get("value") for model in st.session_state.models if model.get("value")]
-            
-            # 获取当前会话信息
-            current_session_id = None
-            current_session_data = None
-            current_session_model = st.session_state.current_session_model
-            user_token = st.session_state.get("saved_api_token", CONFIG["token"])
-            
-            # 查找当前会话信息，确保使用正确的模型
-            for session in st.session_state.sessions:
-                if session.get("id") == st.session_state.bot.session_id:
-                    current_session_id = session.get("id")
-                    current_session_data = session
-                    # 确保使用当前会话的模型
-                    current_session_model = session.get("model", st.session_state.current_session_model)
-                    # 更新状态
-                    st.session_state.selected_model = current_session_model
-                    st.session_state.current_session_model = current_session_model
-                    break
-            
-            # 固定模型分类列表，英文全部大写
-            fixed_categories = ["GPT", "GEMINI", "CLAUDE", "DEEPSEEK", "SORA", "GLM", "QWEN3", "DOUBAO", "其他"]
-            
-            # 模型分类逻辑，不区分大小写
-            model_categories = {category: [] for category in fixed_categories}
-            
-            for model in model_values:
-                # 转换为小写，方便匹配
-                model_lower = model.lower()
-                category_assigned = False
-                
-                # 按固定顺序匹配分类，比较时不区分大小写
-                for category in fixed_categories[:-1]:  # 排除"其他"分类
-                    # 将分类也转为小写进行比较
-                    category_lower = category.lower()
-                    if category_lower in model_lower:
-                        model_categories[category].append(model)
-                        category_assigned = True
-                        break
-                
-                # 如果没有匹配到任何分类，归为"其他"
-                if not category_assigned:
-                    model_categories["其他"].append(model)
-            
-            # 初始化分类会话状态
-            if "selected_category" not in st.session_state:
-                # 默认选择当前模型所在的分类
-                current_model_category = "其他"
-                for category, models in model_categories.items():
-                    if current_session_model in models:
-                        current_model_category = category
-                        break
-                st.session_state.selected_category = current_model_category
-            
-            # 创建模型选择容器，设置固定高度
-            with st.container(height=200):
-                # 标题  
-                st.subheader("选择模型")
-                
-                # 一级分类选择 - 第一行，使用非空标签但隐藏
-                categories = fixed_categories
-                selected_category = st.selectbox(
-                    "一级分类",  # 非空标签，用于可访问性
-                    options=categories,
-                    index=categories.index(st.session_state.selected_category) if st.session_state.selected_category in categories else 0,
-                    key="model_category_select",
-                    label_visibility="collapsed"  # 隐藏标签
-                )
-                
-                # 更新分类状态
-                st.session_state.selected_category = selected_category
-                
-                # 二级模型选择 - 第二行，使用非空标签但隐藏
-                category_models = model_categories[selected_category]
-                
-                # 确定当前模型在分类中的索引
-                current_model_index = 0
-                if current_session_model in category_models:
-                    current_model_index = category_models.index(current_session_model)
-                
-                selected_model_value = st.selectbox(
-                    "具体模型",  # 非空标签，用于可访问性
-                    options=category_models,
-                    index=current_model_index,
-                    key="model_select",
-                    label_visibility="collapsed"  # 隐藏标签
-                )
-            
-            # 如果模型发生变化，更新会话使用的模型
-            if selected_model_value != current_session_model and current_session_id and current_session_data:
-                # 确保bot实例使用正确的token
-                if user_token:
-                    st.session_state.bot.token = user_token
-                # 更新会话模型（发送PUT请求）
-                bot_instance = AIClient(user_token)
-                bot_instance.session_id = current_session_id
-                success, msg = bot_instance.update_session(current_session_id, {"model": selected_model_value}, current_session_data)
-                if success:
-                    # 更新本地会话列表
-                    for i, s in enumerate(st.session_state.sessions):
-                        if s.get("id") == current_session_id:
-                            st.session_state.sessions[i]["model"] = selected_model_value
-                            break
-                    # 更新状态
-                    st.session_state.selected_model = selected_model_value
-                    st.session_state.current_session_model = selected_model_value
-                    st.toast(f"已切换到模型: {selected_model_value}", icon="✅")
-                else:
-                    st.toast(f"更新模型失败: {msg}", icon="❌")
-        
-        # 新建会话按钮
-        if st.button("🆕 新建会话", use_container_width=True):
-            user_token = st.session_state.get("saved_api_token", CONFIG["token"])
+    if is_pinned:
+        return "📌 已置顶"
+
+    if not timestamp_str: return "未知时间"
+    try:
+        if isinstance(timestamp_str, int):
+            dt = datetime.fromtimestamp(timestamp_str)
+        else:
+            clean_ts = str(timestamp_str).replace('Z', '')
+            dt = datetime.fromisoformat(clean_ts) if 'T' in clean_ts else datetime.strptime(clean_ts, "%Y-%m-%d %H:%M:%S")
+
+        now = datetime.now()
+        diff_days = (now.date() - dt.date()).days
+
+        if diff_days == 0: return "今天"
+        if diff_days == 1: return "昨天"
+        if diff_days <= 7: return "过去 7 天"
+        if diff_days <= 30: return "过去 30 天"
+        return "更早"
+    except:
+        return "未知时间"
+
+def load_session_to_state(session_id, session_name, session_model, user_token):
+    """【封装】加载会话数据到全局状态"""
+    if not st.session_state.bot:
+        st.session_state.bot = AIClient(user_token)
+
+    st.session_state.bot.token = user_token
+    st.session_state.bot.session_id = session_id
+
+    st.session_state.selected_model = session_model or "gemini-3-pro-preview"
+    st.session_state.current_session_model = st.session_state.selected_model
+    st.session_state.status = f"✅ 已连接: {session_name}"
+    st.session_state.messages = [] 
+    st.session_state.useFiles = [] 
+
+    success, data = st.session_state.bot.get_chat_records(session_id)
+    if success and data.get("records"):
+        for record in reversed(data["records"]):
+            use_files = record.get("useFiles", []) or []
+            if record.get("userText"):
+                st.session_state.messages.append({
+                    "role": "user", 
+                    "content": record.get("userText"),
+                    "timestamp": record.get("created", ""),
+                    "files": use_files, 
+                    "file_name": record.get("fileName", "")
+                })
+            if record.get("aiText"):
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": record.get("aiText"),
+                    "tokens": record.get("completionTokens", 0),
+                    "timestamp": record.get("updated", "")
+                })
+            for file in use_files:
+                if not any(f.get("name") == file.get("name") for f in st.session_state.useFiles):
+                    st.session_state.useFiles.append(file)
+        st.toast(f"已加载: {session_name}", icon="✅")
+    else:
+        st.toast(f"已切换 (无记录)", icon="✅")
+
+# --- 子组件渲染函数 ---
+
+def inject_custom_css():
+    """注入侧边栏专用的 CSS"""
+    st.markdown("""
+    <style>
+    /* 全局紧凑调整 */
+    div[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div { margin-bottom: 0.5rem; }
+    div[data-testid="stTextInput"] { margin-bottom: 5px !important; }
+    div[data-testid="stTextInput"] input { padding: 8px 10px; font-size: 13px; border-radius: 8px; }
+
+    /* --- 1. 左侧会话按钮 (75%) --- */
+    div[data-testid="stExpanderDetails"] div[data-testid="column"]:first-child button {
+        text-align: left !important; 
+        padding: 6px 8px !important;
+        margin: 0 !important; 
+        width: 100% !important; 
+        display: block !important; 
+        white-space: nowrap !important; 
+        overflow: hidden !important; 
+        text-overflow: ellipsis !important;
+        font-size: 13px !important; 
+        line-height: 1.6 !important; 
+        min-height: 32px !important;
+        transition: background-color 0.2s ease !important;
+    }
+
+    /* 【关键修改】未选中状态 (secondary) - 完全透明，无边框 */
+    div[data-testid="stExpanderDetails"] div[data-testid="column"]:first-child button[kind="secondary"] {
+        background-color: transparent !important; 
+        border: none !important;
+        box-shadow: none !important;
+        color: inherit !important; /* 保持文字颜色可见 */
+    }
+
+    /* 选中状态 (primary) - 保持高亮 */
+    div[data-testid="stExpanderDetails"] div[data-testid="column"]:first-child button[kind="primary"] {
+        background-color: rgba(128, 128, 128, 0.15) !important; 
+        font-weight: 600 !important;
+        border: none !important;
+        border-left: 3px solid #FF4B4B !important; 
+        border-radius: 2px 4px 4px 2px !important;
+    }
+
+    /* 悬停状态 - 鼠标放上去才显示淡淡的背景 */
+    div[data-testid="stExpanderDetails"] div[data-testid="column"]:first-child button[kind="secondary"]:hover {
+        background-color: rgba(128, 128, 128, 0.08) !important; 
+        padding-left: 12px !important;
+    }
+
+    /* 分组标题 */
+    .session-group-header {
+        font-size: 12px; color: #888; font-weight: 600;
+        padding-top: 15px !important; padding-bottom: 0px !important;
+        display: flex !important; align-items: flex-end !important; margin: 0 !important;
+    }
+    hr { margin-top: 0.2rem !important; margin-bottom: 0.5rem !important; border-color: rgba(128, 128, 128, 0.2) !important; }
+
+    /* --- 2. 右侧菜单按钮 (25%) --- */
+    div[data-testid="stExpanderDetails"] div[data-testid="column"]:last-child button {
+        background-color: transparent !important; 
+        border: none !important; 
+        box-shadow: none !important;
+        padding: 0 !important; 
+        margin: 0 !important; 
+        width: 100% !important; 
+        height: 32px !important;
+        display: flex !important; 
+        align-items: center !important; 
+        justify-content: center !important;
+        opacity: 0; /* 默认完全不可见 */
+        transition: opacity 0.2s, background-color 0.2s !important;
+    }
+
+    /* 悬停行显示占位 (让用户知道这里有东西) */
+    div[data-testid="stHorizontalBlock"]:hover div[data-testid="column"]:last-child button { 
+        opacity: 0.3; 
+        /* 这里可以加一点点背景色辅助定位，或者保持透明全靠 hover 触发 */
+        background-color: rgba(128, 128, 128, 0.05) !important; 
+    }
+
+    /* 鼠标真正放在按钮上时 - 高亮显示 */
+    div[data-testid="stHorizontalBlock"] div[data-testid="column"]:last-child button:hover {
+        opacity: 1 !important; 
+        background-color: rgba(128, 128, 128, 0.15) !important;
+        border-radius: 4px !important;
+        /* 我们要在 hover 时显示一个伪元素图标，增加可用性 */
+        position: relative;
+    }
+
+    /* 巧妙设计：虽然按钮文字是空格，但 hover 时通过 CSS 加一个三点图标，提示这是菜单 */
+    div[data-testid="stHorizontalBlock"] div[data-testid="column"]:last-child button:hover::after {
+        content: "⋮";
+        position: absolute;
+        color: #666;
+        font-weight: bold;
+    }
+
+    /* 隐藏 Popover 自带的下三角 */
+    div[data-testid="stExpanderDetails"] div[data-testid="column"]:last-child button svg { display: none !important; }
+
+    div[data-testid="stPopoverBody"] { padding: 10px !important; }
+    div[data-testid="stPopoverBody"] button { margin-bottom: 5px !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
+def render_model_selector(user_token):
+    """渲染模型选择和新建会话区域"""
+    if not (st.session_state.models and st.session_state.bot):
+        return
+
+    model_values = [m.get("value") for m in st.session_state.models if m.get("value")]
+    current_model = st.session_state.current_session_model
+
+    current_session_data = next((s for s in st.session_state.sessions if s.get("id") == st.session_state.bot.session_id), None)
+    if current_session_data:
+        current_model = current_session_data.get("model", current_model)
+        st.session_state.selected_model = current_model
+
+    fixed_cats = ["GPT", "GEMINI", "CLAUDE", "DEEPSEEK", "SORA", "GLM", "QWEN3", "DOUBAO", "其他"]
+    model_cats = {c: [] for c in fixed_cats}
+    for m in model_values:
+        found = False
+        for c in fixed_cats[:-1]:
+            if c.lower() in m.lower():
+                model_cats[c].append(m)
+                found = True
+                break
+        if not found: model_cats["其他"].append(m)
+
+    if "selected_category" not in st.session_state:
+        st.session_state.selected_category = "其他"
+        for c, ms in model_cats.items():
+            if current_model in ms:
+                st.session_state.selected_category = c
+                break
+
+    with st.container():
+        cat_idx = fixed_cats.index(st.session_state.selected_category) if st.session_state.selected_category in fixed_cats else 0
+        sel_cat = st.selectbox("模型分类", fixed_cats, index=cat_idx, key="cat_sel", label_visibility="collapsed")
+        st.session_state.selected_category = sel_cat
+
+        cat_models = model_cats[sel_cat]
+        mod_idx = cat_models.index(current_model) if current_model in cat_models else 0
+        sel_model = st.selectbox("具体模型", cat_models, index=mod_idx, key="mod_sel", label_visibility="collapsed")
+
+        if st.button("🆕 新建会话", use_container_width=True, type="primary"):
             if not user_token:
-                st.error("请先输入API Token！")
+                st.error("需 Token")
             else:
-                bot_instance = AIClient(user_token)
-                # 使用用户选择的模型创建会话
-                success, msg = bot_instance.create_session(model=st.session_state.selected_model)
-                if success:
-                    st.session_state.bot = bot_instance
-                    st.session_state.status = f"✅ 已创建新会话 (ID: {msg[-6:]})"
-                    st.session_state.messages = []
-                    # 刷新会话列表
-                    success, data = bot_instance.get_sessions()
-                    if success:
-                        st.session_state.sessions = data
-                    # 更新当前会话使用的模型
-                    st.session_state.current_session_model = st.session_state.selected_model
-                    st.toast("新会话创建成功！", icon="✅")
-                    # 强制刷新界面，确保会话列表更新
+                bot = AIClient(user_token)
+                ok, msg = bot.create_session(model=st.session_state.selected_model)
+                if ok:
+                    load_session_to_state(msg, "新会话", st.session_state.selected_model, user_token)
+                    ok_s, data_s = bot.get_sessions()
+                    if ok_s: st.session_state.sessions = data_s
                     st.rerun()
                 else:
-                    st.toast(f"创建新会话失败: {msg}", icon="❌")
-        
-        # 获取当前会话信息
-        current_session_name = "未命名会话"
-        current_session_id = None
-        current_session_data = None
-        user_token = st.session_state.get("saved_api_token", CONFIG["token"])
-        
-        if st.session_state.bot and st.session_state.bot.session_id:
-            # 查找当前会话信息
-            for session in st.session_state.sessions:
-                if session.get("id") == st.session_state.bot.session_id:
-                    current_session_name = session.get("name", "未命名会话")
-                    current_session_id = session.get("id")
-                    current_session_data = session
-                    break
-        
-        # 修改当前会话名称功能 - 放在一行
-        if current_session_id and current_session_data:
-            col_name, col_save = st.columns([3, 1])
-            with col_name:
-                new_name = st.text_input("会话名称", value=current_session_name, key="current_session_name_edit", label_visibility="collapsed")
-            with col_save:
-                if st.button("💾", key="save_name", use_container_width=True):
-                    if new_name and new_name != current_session_name:
-                        # 更新会话名称
-                        success, msg = st.session_state.bot.update_session(current_session_id, {"name": new_name}, current_session_data)
-                        if success:
-                            # 更新本地会话列表
-                            for i, s in enumerate(st.session_state.sessions):
-                                if s.get("id") == current_session_id:
-                                    st.session_state.sessions[i]["name"] = new_name
-                                    break
-                            st.toast(f"会话名称已更新为: {new_name}", icon="✅")
-                            # 强制刷新界面，确保会话列表更新
-                            st.rerun()
-                        else:
-                            st.toast(f"更新失败: {msg}", icon="❌")
-        
-        # 可展开的历史会话
-        with st.expander("📜 历史会话", expanded=False):
-            if st.session_state.sessions:
-                for session in st.session_state.sessions:
-                    session_id = session.get("id")
-                    session_name = session.get("name", "未命名会话")
-                    
-                    # 创建会话行，将删除选项与会话名称合并
-                    col1, col2 = st.columns([0.8, 0.2])
-                    
-                    with col1:
-                        # 创建会话选择按钮
-                        if st.button(f"{session_name}", key=f"session_{session_id}", use_container_width=True):
-                            # 检查是否有有效token
-                            user_token = st.session_state.get("saved_api_token", CONFIG["token"])
-                            if not user_token:
-                                st.error("请先输入API Token！")
-                                continue
-                                
-                            # 设置当前会话ID
-                            if st.session_state.bot:
-                                # 确保bot实例使用正确的token
-                                st.session_state.bot.token = user_token
-                                st.session_state.bot.session_id = session_id
-                                
-                                # 自动选择当前会话的模型
-                                session_model = session.get("model", "gemini-3-pro-preview")
-                                st.session_state.selected_model = session_model
-                                st.session_state.current_session_model = session_model
-                                
-                                st.session_state.status = f"✅ 已切换到会话: {session_name}"
-                                # 清空当前聊天记录，因为切换了会话
-                                st.session_state.messages = []
-                                
-                                # 加载该会话的历史聊天记录
-                                success, data = st.session_state.bot.get_chat_records(session_id)
-                                if success:
-                                    if data.get("records"):
-                                        # 将历史记录转换为消息格式
-                                        for record in reversed(data["records"]):
-                                            # 每条记录包含一个完整的对话回合
-                                            user_text = record.get("userText")
-                                            ai_text = record.get("aiText")
-                                            use_files = record.get("useFiles", [])
-                                            
-                                            # 确保use_files始终是一个可迭代对象
-                                            if use_files is None:
-                                                use_files = []
-                                            
-                                            # 添加用户消息
-                                            if user_text:
-                                                st.session_state.messages.append({
-                                                    "role": "user",
-                                                    "content": user_text,
-                                                    "tokens": record.get("completionTokens", 0),
-                                                    "files": use_files,
-                                                    "file_name": record.get("fileName", "")
-                                                })
-                                            
-                                            # 添加AI回复（不包含文件信息）
-                                            if ai_text:
-                                                st.session_state.messages.append({
-                                                    "role": "assistant",
-                                                    "content": ai_text,
-                                                    "tokens": record.get("completionTokens", 0)
-                                                })
-                                            
-                                            # 同时更新全局useFiles列表，避免重复
-                                            for file in use_files:
-                                                file_exists = any(existing_file.get("name") == file.get("name") for existing_file in st.session_state.useFiles)
-                                                if not file_exists:
-                                                    st.session_state.useFiles.append(file)
-                                        st.toast(f"已切换到会话: {session_name}，加载了 {len(data['records'])} 条历史记录", icon="✅")
-                                    else:
-                                        st.toast(f"已切换到会话: {session_name}，但没有历史记录", icon="✅")
-                                else:
-                                    st.toast(f"加载历史记录失败: {data}", icon="❌")
-                                    st.toast(f"已切换到会话: {session_name}", icon="✅")
-                            else:
-                                bot_instance = AIClient(user_token)
-                                bot_instance.session_id = session_id
-                                st.session_state.bot = bot_instance
-                                
-                                # 自动选择当前会话的模型
-                                session_model = session.get("model", "gemini-3-pro-preview")
-                                st.session_state.selected_model = session_model
-                                st.session_state.current_session_model = session_model
-                                
-                                st.session_state.status = f"✅ 已连接到会话: {session_name}"
-                                st.session_state.messages = []
-                                
-                                # 加载该会话的历史聊天记录
-                                success, data = bot_instance.get_chat_records(session_id)
-                                if success:
-                                    if data.get("records"):
-                                        # 将历史记录转换为消息格式
-                                        for record in reversed(data["records"]):
-                                            # 每条记录包含一个完整的对话回合
-                                            user_text = record.get("userText")
-                                            ai_text = record.get("aiText")
-                                            use_files = record.get("useFiles", [])
-                                            
-                                            # 确保use_files始终是一个可迭代对象
-                                            if use_files is None:
-                                                use_files = []
-                                            
-                                            # 添加用户消息
-                                            if user_text:
-                                                st.session_state.messages.append({
-                                                    "role": "user",
-                                                    "content": user_text,
-                                                    "tokens": record.get("completionTokens", 0),
-                                                    "files": use_files,
-                                                    "file_name": record.get("fileName", "")
-                                                })
-                                            
-                                            # 添加AI回复（不包含文件信息）
-                                            if ai_text:
-                                                st.session_state.messages.append({
-                                                    "role": "assistant",
-                                                    "content": ai_text,
-                                                    "tokens": record.get("completionTokens", 0)
-                                                })
-                                            
-                                            # 同时更新全局useFiles列表，避免重复
-                                            for file in use_files:
-                                                file_exists = any(existing_file.get("name") == file.get("name") for existing_file in st.session_state.useFiles)
-                                                if not file_exists:
-                                                    st.session_state.useFiles.append(file)
-                                        st.toast(f"已连接到会话: {session_name}，加载了 {len(data['records'])} 条历史记录", icon="✅")
-                                    else:
-                                        st.toast(f"已连接到会话: {session_name}，但没有历史记录", icon="✅")
-                                else:
-                                    st.toast(f"加载历史记录失败: {data}", icon="❌")
-                                    st.toast(f"已连接到会话: {session_name}", icon="✅")
-                    
-                    with col2:
-                        # 添加三个点按钮，点击后显示删除选项
-                        # 不使用key参数，避免API兼容性问题
-                        with st.popover("⋮"):
-                            if st.button(f"删除会话", key=f"delete_{session_id}", use_container_width=True, type="secondary"):
-                                # 直接执行删除会话逻辑，不再显示确认弹窗
-                                user_token = st.session_state.get("saved_api_token", CONFIG["token"])
-                                if not user_token:
-                                    st.error("请先输入API Token！")
-                                else:
-                                    # 创建bot实例进行删除操作
-                                    bot_instance = AIClient(user_token)
-                                    success, msg = bot_instance.delete_session(session_id)
-                                    if success:
-                                        # 重新加载会话列表
-                                        success, data = bot_instance.get_sessions()
-                                        if success:
-                                            # 更新会话列表
-                                            st.session_state.sessions = data
-                                            
-                                            # 触发侧边栏刷新状态
-                                            if "sidebar_refresh" not in st.session_state:
-                                                st.session_state.sidebar_refresh = 0
-                                            st.session_state.sidebar_refresh += 1
-                                            
-                                            st.toast(f"已删除会话: {session_name}", icon="✅")
-                                            # 刷新界面，确保侧边栏历史会话更新
-                                            st.rerun()
-                                    else:
-                                        st.toast(f"删除会话失败: {msg}", icon="❌")
-            else:
-                st.info("暂无历史会话")
-        
-        # 可展开的配置
-        with st.expander("⚙️ 配置", expanded=False):
-            # API密钥配置区
-            # 从session_state获取保存的token，默认使用CONFIG["token"]
-            saved_token = st.session_state.get("saved_api_token", CONFIG["token"])
-            
-            user_token = st.text_input(
-                "API Token",
-                value=saved_token,
-                type="password",
-                help="输入您的API令牌",
-                key="api_token_input"  # 添加唯一key，避免重复ID错误
-            )
-            
-            # 添加记住token选项
-            remember_token = st.checkbox("记住API Token", value=st.session_state.get("remember_token", False))
-            
-            # 处理token保存逻辑
-            token_changed = False
-            current_token = st.session_state.get("saved_api_token", CONFIG["token"])
-            
-            # 检查是否有初始token（从secrets或env var）但尚未保存到session_state
-            has_initial_token = CONFIG["token"] and not st.session_state.get("saved_api_token")
-            
-            if remember_token:
-                if st.session_state.get("saved_api_token") != user_token:
-                    st.session_state["saved_api_token"] = user_token
-                    st.session_state["remember_token"] = True
-                    token_changed = True
-            else:
-                if "saved_api_token" in st.session_state:
-                    del st.session_state["saved_api_token"]
-                    st.session_state["remember_token"] = False
-                    token_changed = True
-                    # 取消记住时，使用空token
-                    user_token = ""
-            
-            # 如果有初始token但尚未处理，触发token变化
-            if has_initial_token and not token_changed:
-                token_changed = True
-                user_token = CONFIG["token"]
-                st.session_state["saved_api_token"] = user_token
+                    st.toast(f"创建失败: {msg}", icon="❌")
+
+    if sel_model != current_model and current_session_data:
+        bot = AIClient(user_token)
+        if bot.update_session(current_session_data["id"], {"model": sel_model}, current_session_data)[0]:
+            for s in st.session_state.sessions:
+                if s["id"] == current_session_data["id"]: s["model"] = sel_model
+            st.session_state.selected_model = sel_model
+            st.session_state.current_session_model = sel_model
+            st.toast(f"已切换: {sel_model}", icon="✅")
+
+def render_session_list(user_token):
+    """渲染历史会话列表"""
+    st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
+
+    # --- 会话改名区域 ---
+    curr_s = next((s for s in st.session_state.sessions if st.session_state.bot and s["id"] == st.session_state.bot.session_id), None)
+    if curr_s:
+        c1, c2 = st.columns([3, 1])
+        new_name = c1.text_input("改名", value=curr_s.get("name", "未命名"), key="name_edit", label_visibility="collapsed")
+        if c2.button("💾", key="save_name", use_container_width=True):
+            if new_name != curr_s.get("name"):
+                if st.session_state.bot.update_session(curr_s["id"], {"name": new_name}, curr_s)[0]:
+                    curr_s["name"] = new_name
+                    st.toast("已改名", icon="✅")
+                    st.rerun()
+
+    # --- 历史列表 ---
+    with st.expander("📜 历史会话", expanded=True):
+        if not st.session_state.sessions:
+            st.info("暂无历史会话")
+            return
+
+        query = st.text_input("搜历史", placeholder="搜索...", label_visibility="collapsed")
+
+        # 1. 过滤
+        sessions = [s for s in st.session_state.sessions if not query or query.lower() in (s.get("name") or "").lower()]
+
+        # 2. 排序
+        sessions.sort(key=lambda x: (x.get('topSort', 0), x.get('created', '')), reverse=True)
+
+        if not sessions:
+            st.caption("无匹配会话")
+            return
+
+        # 3. 分组
+        groups = {}
+        group_order = ["📌 已置顶", "今天", "昨天", "过去 7 天", "过去 30 天", "更早", "未知时间"]
+
+        for s in sessions:
+            is_pinned = s.get('topSort') == 1
+            g = get_session_group(s.get('created'), is_pinned=is_pinned)
+            groups.setdefault(g, []).append(s)
+
+        # 4. 渲染
+        for g_name in group_order:
+            if g_name in groups:
+                if not query:
+                    st.markdown(f'<div class="session-group-header">{g_name}</div>', unsafe_allow_html=True)
+                    st.markdown("---")
+
+                for s in groups[g_name]:
+                    s_id = s.get("id")
+                    s_name = s.get("name", "未命名")
+                    is_active = (st.session_state.bot and str(s_id) == str(st.session_state.bot.session_id))
+                    is_pinned = s.get("topSort") == 1
+
+                    with st.container():
+                        # 【关键修改】比例 0.75 : 0.25
+                        c1, c2 = st.columns([0.75, 0.25], gap="small")
+
+                        # A. 切换按钮
+                        if c1.button(s_name, key=f"s_{s_id}", type="primary" if is_active else "secondary", use_container_width=True, help=f"模型: {s.get('model')}"):
+                            if user_token:
+                                load_session_to_state(s_id, s_name, s.get("model"), user_token)
+                                st.rerun()
+
+                        # B. 操作菜单 (空格占位)
+                        # 注意：按钮文字必须是 " "，不能是空字符串，否则 Streamlit 会报错或渲染异常
+                        with c2.popover(" ", use_container_width=True):
+                            # 1. 置顶/取消置顶按钮
+                            pin_text = "🚫 取消置顶" if is_pinned else "📌 置顶会话"
+                            if st.button(pin_text, key=f"pin_{s_id}", use_container_width=True):
+                                if user_token:
+                                    bot = AIClient(user_token)
+                                    ok, msg = bot.toggle_session_pin(s)
+                                    if ok:
+                                        ok_s, data_s = bot.get_sessions()
+                                        if ok_s: st.session_state.sessions = data_s
+                                        st.toast("置顶状态已更新", icon="📌")
+                                        st.rerun()
+
+                            # 2. 删除按钮
+                            if st.button("🔴 删除会话", key=f"d_{s_id}", use_container_width=True):
+                                bot = AIClient(user_token)
+                                if bot.delete_session(s_id)[0]:
+                                    st.session_state.sessions = bot.get_sessions()[1]
+                                    if is_active:
+                                        st.session_state.bot = None
+                                        st.session_state.messages = []
+                                    st.toast("已删除", icon="✅")
+                                    st.rerun()
+
+def render_config_area(user_token):
+    """渲染配置区域"""
+    with st.expander("⚙️ 配置", expanded=False):
+        saved = st.session_state.get("saved_api_token", CONFIG["token"])
+        new_token = st.text_input("API Token", value=saved, type="password", key="token_in")
+        if st.checkbox("记住 Token", value=st.session_state.get("remember_token", False)):
+            if st.session_state.get("saved_api_token") != new_token:
+                st.session_state["saved_api_token"] = new_token
                 st.session_state["remember_token"] = True
-            
-            # 处理会话列表逻辑
-            if user_token:
-                # 有token时的逻辑
-                if token_changed:
-                    # 只有在token实际发生变化时，才重新加载会话列表
-                    bot_instance = AIClient(user_token)
-                    
-                    # 始终重新加载会话列表，确保使用最新token获取的会话
-                    success, data = bot_instance.get_sessions()
-                    if success:
-                        # 更新历史会话列表
-                        st.session_state.sessions = data
-                        st.toast(f"已加载 {len(data)} 个会话", icon="✅")
-                        
-                        # 如果有会话
-                        if data:
-                            current_session_id = None
-                            current_session_name = "未命名会话"
-                            current_session_data = None
-                            
-                            # 如果当前已有会话，使用相同ID
-                            if st.session_state.bot and st.session_state.bot.session_id:
-                                # 检查当前会话ID是否在新的会话列表中
-                                for session in data:
-                                    if session.get("id") == st.session_state.bot.session_id:
-                                        current_session_id = session.get("id")
-                                        current_session_name = session.get("name", "未命名会话")
-                                        current_session_data = session
-                                        break
-                            
-                            # 如果当前会话不存在或没有会话，使用最新会话
-                            if not current_session_id:
-                                # 根据创建时间排序，取最新的会话
-                                recent_session = max(data, key=lambda x: x.get('created', ''))
-                                current_session_id = recent_session.get('id')
-                                current_session_name = recent_session.get('name', '未命名会话')
-                                current_session_data = recent_session
-                            
-                            # 设置当前会话ID
-                            bot_instance.session_id = current_session_id
-                            st.session_state.bot = bot_instance
-                            
-                            # 自动选择当前会话的模型
-                            session_model = next((s.get("model") for s in data if s.get("id") == current_session_id), "gemini-3-pro-preview")
-                            st.session_state.selected_model = session_model
-                            st.session_state.current_session_model = session_model
-                            
-                            st.session_state.status = f"✅ 已连接到会话: {current_session_name}"
-                            
-                            # 加载该会话的历史聊天记录
-                            success, records_data = st.session_state.bot.get_chat_records(current_session_id)
-                            if success and records_data.get("records"):
-                                # 清空当前消息列表，重新加载历史记录
-                                st.session_state.messages = []
-                                # 将历史记录转换为消息格式
-                                for record in reversed(records_data["records"]):
-                                    user_text = record.get("userText")
-                                    ai_text = record.get("aiText")
-                                    use_files = record.get("useFiles", [])
-                                    
-                                    # 确保use_files始终是一个可迭代对象，即使record.get返回None
-                                    if use_files is None:
-                                        use_files = []
-                                    
-                                    if user_text:
-                                        st.session_state.messages.append({
-                                            "role": "user",
-                                            "content": user_text,
-                                            "tokens": record.get("completionTokens", 0),
-                                            "files": use_files,  # 添加历史记录中的文件信息
-                                            "file_name": record.get("fileName", "")  # 兼容旧的文件名记录
-                                        })
-                                    if ai_text:
-                                        st.session_state.messages.append({
-                                            "role": "assistant",
-                                            "content": ai_text,
-                                            "tokens": record.get("completionTokens", 0)
-                                        })
-                                    
-                                    # 同时更新全局useFiles列表，避免重复
-                                    for file in use_files:
-                                        file_exists = any(existing_file.get("name") == file.get("name") for existing_file in st.session_state.useFiles)
-                                        if not file_exists:
-                                            st.session_state.useFiles.append(file)
-                                st.toast(f"已更新会话历史记录", icon="✅")
-                        
-                        # 强制刷新侧边栏，确保历史会话列表更新
-                        # 这里通过更新一个状态变量来触发重新渲染
-                        if "sidebar_refresh" not in st.session_state:
-                            st.session_state.sidebar_refresh = 0
-                        st.session_state.sidebar_refresh += 1
-                        
-                        # 刷新历史会话的会话状态
-                        st.rerun()
-                    else:
-                        st.info("暂无历史会话")
-                else:
-                    # 没有token变化时，不需要显示加载失败消息
-                    pass
-            else:
-                # 没有token时，只重置机器人实例和状态，不清空会话列表
-                st.session_state.bot = None
-                st.session_state.messages = []
-                st.session_state.status = "未连接"
-            
-            # 初始化会话状态中的对话参数
-            if "chat_params" not in st.session_state:
-                st.session_state.chat_params = {
-                    "contextCount": CONFIG["contextCount"],
-                    "prompt": CONFIG["prompt"],
-                    "temperature": float(CONFIG["temperature"])
-                }
-            
-            # 上下文数量
-            st.session_state.chat_params["contextCount"] = st.slider(
-                "上下文数量",
-                min_value=1,
-                max_value=100,
-                value=int(st.session_state.chat_params["contextCount"]),
-                help="控制对话中使用的历史上下文数量"
-            )
-            
-            # 系统提示词
-            st.session_state.chat_params["prompt"] = st.text_area(
-                "系统提示词",
-                value=st.session_state.chat_params["prompt"],
-                height=100,
-                help="AI的系统提示词，指导AI的回复风格和行为"
-            )
-            
-            # 温度参数
-            st.session_state.chat_params["temperature"] = st.slider(
-                "温度",
-                min_value=0.0,
-                max_value=1.0,
-                step=0.1,
-                value=float(st.session_state.chat_params["temperature"]),
-                help="控制AI回复的随机性，值越高越随机"
-            )
-            
-            # 保存对话参数到配置
-            if st.button("保存对话参数", use_container_width=True):
-                # 更新CONFIG中的对话参数
-                CONFIG["contextCount"] = st.session_state.chat_params["contextCount"]
-                CONFIG["prompt"] = st.session_state.chat_params["prompt"]
-                CONFIG["temperature"] = st.session_state.chat_params["temperature"]
-                
-                # 发送PUT请求到API更新会话参数
-                if st.session_state.bot and st.session_state.bot.session_id:
-                    import requests
-                    
-                    # 构建请求URL
-                    session_id = st.session_state.bot.session_id
-                    url = f"{CONFIG['base_url']}/chat/session/{session_id}"
-                    
-                    # 构建完整的请求负载，包含所有必要字段
-                    payload = {
-                        "id": int(session_id),
-                        "name": "新对话",  # 暂时使用默认名称
-                        "model": st.session_state.selected_model,
-                        "contextCount": st.session_state.chat_params["contextCount"],
-                        "temperature": st.session_state.chat_params["temperature"],
-                        "prompt": st.session_state.chat_params["prompt"],
-                        "presencePenalty": CONFIG["presencePenalty"],
-                        "frequencyPenalty": CONFIG["frequencyPenalty"],
-                        "maxToken": CONFIG["maxToken"],
-                        "topSort": CONFIG["topSort"],
-                        "plugins": [],
-                        "mcp": [],
-                        "icon": "",
-                        "useAppId": 0
-                    }
-                    
-                    # 获取当前bot的headers
-                    headers = st.session_state.bot.headers
-                    
-                    try:
-                        # 发送PUT请求
-                        response = requests.put(url, headers=headers, json=payload)
-                        if response.status_code == 200:
-                            st.toast("对话参数已保存", icon="✅")
-                        else:
-                            st.toast(f"保存失败: {response.status_code}", icon="❌")
-                    except Exception as e:
-                        st.toast(f"保存失败: {str(e)}", icon="❌")
-                else:
-                    st.toast("请先连接会话", icon="❌")
+                st.rerun()
+        else:
+            if "saved_api_token" in st.session_state:
+                del st.session_state["saved_api_token"]
+                st.session_state["remember_token"] = False
+                st.rerun()
+
+        if "chat_params" not in st.session_state:
+            st.session_state.chat_params = {k: CONFIG[k] for k in ["contextCount", "prompt", "temperature"]}
+
+        p = st.session_state.chat_params
+        p["contextCount"] = st.slider("上下文", 1, 100, int(p["contextCount"]))
+        p["prompt"] = st.text_area("提示词", value=p["prompt"], height=100)
+        p["temperature"] = st.slider("温度", 0.0, 1.0, float(p["temperature"]), step=0.1)
+
+        if st.button("保存参数", use_container_width=True):
+            CONFIG.update(p)
+            st.toast("参数已保存", icon="✅")
+
+# --- 主渲染入口 ---
+
+def render_sidebar():
+    """主函数：组合各部分"""
+    with st.sidebar:
+        inject_custom_css()
+
+        user_token = st.session_state.get("saved_api_token", CONFIG["token"])
+
+        render_model_selector(user_token)
+        render_session_list(user_token)
+        render_config_area(user_token)

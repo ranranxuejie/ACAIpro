@@ -9,15 +9,12 @@ class AIClient:
     AI客户端类，处理与API的交互
     """
     def __init__(self, token):
-        """
-        初始化AI客户端
-        
-        Args:
-            token (str): API访问令牌
-        """
         self.token = token
         self.session_id = None
         self.base_url = CONFIG["base_url"]
+        # 新增：用于存储最后一次对话的完整元数据（时间、Tokens等）
+        self.last_chat_metadata = {}
+        self.last_tokens_used = 0
         self.headers = {
             "Authorization": token,
             "Content-Type": "application/json",
@@ -176,7 +173,22 @@ class AIClient:
             return False, f"HTTP {response.status_code}"
         except Exception as e:
             return False, str(e)
-    
+    def toggle_session_pin(self, session_data):
+        """
+        [新增] 切换会话置顶状态
+        Args:
+            session_data (dict): 当前会话的完整数据
+        """
+        current_sort = session_data.get("topSort", 0)
+        # 如果当前是1，则设为0；否则设为1
+        new_sort = 0 if current_sort == 1 else 1
+
+        return self.update_session(
+            session_data["id"], 
+            {"topSort": new_sort}, 
+            session_data
+        )
+
     def get_model_list(self):
         """
         获取所有可选模型
@@ -223,20 +235,14 @@ class AIClient:
     def chat_stream(self, user_text, file_obj=None):
         """
         流式聊天生成器
-        
-        Args:
-            user_text (str): 用户输入文本
-            file_obj: 文件对象
-            
-        Yields:
-            str: 流式生成的文本块
         """
         if not self.session_id:
             yield "⚠️ 会话未连接，请先创建或选择会话！"
             return
 
-        # 初始化tokens信息
+        # 重置元数据
         self.last_tokens_used = 0
+        self.last_chat_metadata = {} # 初始化为空字典
 
         url = f"{self.base_url}/chat/completions"
 
@@ -245,7 +251,6 @@ class AIClient:
             processed_file = self.process_streamlit_file(file_obj)
             if processed_file:
                 files_data.append(processed_file)
-
 
         payload = {
             "sessionId": self.session_id,
@@ -275,23 +280,28 @@ class AIClient:
                             break
                         try:
                             data_obj = json.loads(json_str)
-                            # 检查是否包含 "type":"string"，只保留 string 类型的内容
+                            
+                            # 1. 处理字符串内容 (流式文本)
                             if isinstance(data_obj, dict) and data_obj.get("type") == "string":
                                 content = data_obj.get("data", "")
                                 yield content
-                            # 检查是否包含object类型数据，从中提取completionTokens
+                                
+                            # 2. 处理对象元数据 (API返回的最终统计信息)
                             elif isinstance(data_obj, dict) and data_obj.get("type") == "object":
-                                # 保存tokens信息
+                                # data 结构示例: {"id":..., "created":"...", "updated":"...", "completionTokens":...}
                                 data = data_obj.get("data", {})
-                                # 优先使用completionTokens
+                                
+                                # 保存完整元数据到实例变量，供外部读取
+                                self.last_chat_metadata = data
+                                
+                                # 为了兼容旧逻辑，更新 tokens
                                 self.last_tokens_used = data.get("completionTokens", 0)
-                                # 保存完整数据，用于调试
-                                self.last_api_response = data_obj
-                            # 检查是否包含stats类型数据，保持兼容
+                                
+                            # 3. 处理 stats 类型 (兼容性)
                             elif isinstance(data_obj, dict) and data_obj.get("type") == "stats":
-                                # 保存tokens信息
                                 self.last_tokens_used = data_obj.get("data", {}).get("totalToken", 0)
-                        except:
+                                
+                        except Exception:
                             continue
         except Exception as e:
             yield f"❌ 网络请求错误: {e}"
