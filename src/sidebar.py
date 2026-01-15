@@ -48,27 +48,31 @@ def load_session_to_state(session_id, session_name, session_model, user_token):
     st.session_state.useFiles = [] 
 
     success, data = st.session_state.bot.get_chat_records(session_id)
-    if success and data.get("records"):
-        for record in reversed(data["records"]):
-            use_files = record.get("useFiles", []) or []
-            if record.get("userText"):
-                st.session_state.messages.append({
-                    "role": "user", 
-                    "content": record.get("userText"),
-                    "timestamp": record.get("created", ""),
-                    "files": use_files, 
-                    "file_name": record.get("fileName", "")
-                })
-            if record.get("aiText"):
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": record.get("aiText"),
-                    "tokens": record.get("completionTokens", 0),
-                    "timestamp": record.get("updated", "")
-                })
-            for file in use_files:
-                if not any(f.get("name") == file.get("name") for f in st.session_state.useFiles):
-                    st.session_state.useFiles.append(file)
+        if success and data.get("records"):
+            for record in reversed(data["records"]):
+                use_files = record.get("useFiles", []) or []
+                if record.get("userText"):
+                    st.session_state.messages.append({
+                        "role": "user", 
+                        "content": record.get("userText"),
+                        "updated": record.get("created", ""),
+                        "files": use_files, 
+                        "file_name": record.get("fileName", "")
+                    })
+                if record.get("aiText"):
+                    # 从API返回的数据中获取tokens，尝试多种可能的字段名
+                    tokens_used = record.get("useTokens", 0) or record.get("completionTokens", 0) or record.get("tokens", 0)
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": record.get("aiText"),
+                        "tokens": tokens_used,
+                        "useTokens": tokens_used,  # 同时保存为useTokens，保持与handle_user_input一致
+                        "updated": record.get("updated", ""),
+                        "model": record.get("model", "")  # 添加模型信息
+                    })
+                for file in use_files:
+                    if not any(f.get("name") == file.get("name") for f in st.session_state.useFiles):
+                        st.session_state.useFiles.append(file)
         st.toast(f"已加载: {session_name}", icon="✅")
     else:
         st.toast(f"已切换 (无记录)", icon="✅")
@@ -84,10 +88,57 @@ def inject_custom_css():
     div[data-testid="stTextInput"] { margin-bottom: 5px !important; }
     div[data-testid="stTextInput"] input { padding: 8px 10px; font-size: 13px; border-radius: 8px; }
 
+    /* =================================================================================
+       【关键修改】响应式网格布局逻辑
+       ================================================================================= */
+
+    /* 1. 将 Expand Details 内部的容器转为 CSS Grid */
+    div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] {
+        display: grid !important;
+        /* 核心：自动填充，最小宽度 135px。侧边栏拉宽时会自动一行排两个，窄时排一个 */
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
+        gap: 8px !important;
+        padding-right: 2px;
+    }
+
+    /* 2. 让直接子元素填满网格单元 */
+    div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] > div {
+        width: 100% !important;
+    }
+
+    /* 3. 【特殊处理】让包含"标题"和"分割线"的元素跨越整行（不被分栏） */
+    /* 使用 :has() 选择器检查是否包含特定类名或 HR 标签 */
+    div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] > div:has(.session-group-header),
+    div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] > div:has(hr) {
+        grid-column: 1 / -1 !important; /* 强制跨越所有列 */
+        margin-top: 5px !important;
+    }
+
+    /* 4. 卡片化样式：为每个会话项增加背景和边框，使其像一个小磁贴 */
+    div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] {
+        background-color: rgba(128, 128, 128, 0.04);
+        border: 1px solid rgba(128, 128, 128, 0.08);
+        border-radius: 6px;
+        padding: 4px;
+        align-items: center;
+        transition: all 0.2s ease;
+        height: 100% !important; /* 确保高度一致 */
+    }
+
+    /* 悬停卡片效果 */
+    div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"]:hover {
+        background-color: rgba(128, 128, 128, 0.08);
+        border-color: rgba(128, 128, 128, 0.2);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+
+    /* ================================================================================= */
+
     /* --- 1. 左侧会话按钮 (75%) --- */
     div[data-testid="stExpanderDetails"] div[data-testid="column"]:first-child button {
         text-align: left !important; 
-        padding: 6px 8px !important;
+        padding: 4px 6px !important; /* 稍微减小内边距以适应小卡片 */
         margin: 0 !important; 
         width: 100% !important; 
         display: block !important; 
@@ -95,20 +146,20 @@ def inject_custom_css():
         overflow: hidden !important; 
         text-overflow: ellipsis !important;
         font-size: 13px !important; 
-        line-height: 1.6 !important; 
-        min-height: 32px !important;
+        line-height: 1.5 !important; 
+        min-height: 28px !important;
         transition: background-color 0.2s ease !important;
     }
 
-    /* 【关键修改】未选中状态 (secondary) - 完全透明，无边框 */
+    /* 未选中状态 (secondary) - 透明 */
     div[data-testid="stExpanderDetails"] div[data-testid="column"]:first-child button[kind="secondary"] {
         background-color: transparent !important; 
         border: none !important;
         box-shadow: none !important;
-        color: inherit !important; /* 保持文字颜色可见 */
+        color: inherit !important;
     }
 
-    /* 选中状态 (primary) - 保持高亮 */
+    /* 选中状态 (primary) - 明显的左边框和背景 */
     div[data-testid="stExpanderDetails"] div[data-testid="column"]:first-child button[kind="primary"] {
         background-color: rgba(128, 128, 128, 0.15) !important; 
         font-weight: 600 !important;
@@ -116,20 +167,6 @@ def inject_custom_css():
         border-left: 3px solid #FF4B4B !important; 
         border-radius: 2px 4px 4px 2px !important;
     }
-
-    /* 悬停状态 - 鼠标放上去才显示淡淡的背景 */
-    div[data-testid="stExpanderDetails"] div[data-testid="column"]:first-child button[kind="secondary"]:hover {
-        background-color: rgba(128, 128, 128, 0.08) !important; 
-        padding-left: 12px !important;
-    }
-
-    /* 分组标题 */
-    .session-group-header {
-        font-size: 12px; color: #888; font-weight: 600;
-        padding-top: 15px !important; padding-bottom: 0px !important;
-        display: flex !important; align-items: flex-end !important; margin: 0 !important;
-    }
-    hr { margin-top: 0.2rem !important; margin-bottom: 0.5rem !important; border-color: rgba(128, 128, 128, 0.2) !important; }
 
     /* --- 2. 右侧菜单按钮 (25%) --- */
     div[data-testid="stExpanderDetails"] div[data-testid="column"]:last-child button {
@@ -139,31 +176,28 @@ def inject_custom_css():
         padding: 0 !important; 
         margin: 0 !important; 
         width: 100% !important; 
-        height: 32px !important;
+        height: 28px !important;
         display: flex !important; 
         align-items: center !important; 
         justify-content: center !important;
-        opacity: 0; /* 默认完全不可见 */
-        transition: opacity 0.2s, background-color 0.2s !important;
+        opacity: 0; 
+        transition: opacity 0.2s !important;
     }
 
-    /* 悬停行显示占位 (让用户知道这里有东西) */
+    /* 卡片悬停时，显示右侧按钮 */
     div[data-testid="stHorizontalBlock"]:hover div[data-testid="column"]:last-child button { 
-        opacity: 0.3; 
-        /* 这里可以加一点点背景色辅助定位，或者保持透明全靠 hover 触发 */
-        background-color: rgba(128, 128, 128, 0.05) !important; 
+        opacity: 0.5; 
     }
 
-    /* 鼠标真正放在按钮上时 - 高亮显示 */
+    /* 按钮自身悬停时高亮 */
     div[data-testid="stHorizontalBlock"] div[data-testid="column"]:last-child button:hover {
         opacity: 1 !important; 
         background-color: rgba(128, 128, 128, 0.15) !important;
         border-radius: 4px !important;
-        /* 我们要在 hover 时显示一个伪元素图标，增加可用性 */
         position: relative;
     }
 
-    /* 巧妙设计：虽然按钮文字是空格，但 hover 时通过 CSS 加一个三点图标，提示这是菜单 */
+    /* Hover 显示三点图标 */
     div[data-testid="stHorizontalBlock"] div[data-testid="column"]:last-child button:hover::after {
         content: "⋮";
         position: absolute;
@@ -171,8 +205,15 @@ def inject_custom_css():
         font-weight: bold;
     }
 
-    /* 隐藏 Popover 自带的下三角 */
     div[data-testid="stExpanderDetails"] div[data-testid="column"]:last-child button svg { display: none !important; }
+
+    /* 分组标题 */
+    .session-group-header {
+        font-size: 12px; color: #888; font-weight: 600;
+        padding-top: 10px !important; padding-bottom: 2px !important;
+        display: flex !important; align-items: flex-end !important; margin: 0 !important;
+    }
+    hr { margin-top: 0.2rem !important; margin-bottom: 0.5rem !important; border-color: rgba(128, 128, 128, 0.2) !important; }
 
     div[data-testid="stPopoverBody"] { padding: 10px !important; }
     div[data-testid="stPopoverBody"] button { margin-bottom: 5px !important; }
@@ -289,6 +330,7 @@ def render_session_list(user_token):
         for g_name in group_order:
             if g_name in groups:
                 if not query:
+                    # 标题和分割线 (CSS会自动让它们跨整行)
                     st.markdown(f'<div class="session-group-header">{g_name}</div>', unsafe_allow_html=True)
                     st.markdown("---")
 
@@ -299,7 +341,7 @@ def render_session_list(user_token):
                     is_pinned = s.get("topSort") == 1
 
                     with st.container():
-                        # 【关键修改】比例 0.75 : 0.25
+                        # 比例 0.75 : 0.25
                         c1, c2 = st.columns([0.75, 0.25], gap="small")
 
                         # A. 切换按钮
@@ -309,7 +351,6 @@ def render_session_list(user_token):
                                 st.rerun()
 
                         # B. 操作菜单 (空格占位)
-                        # 注意：按钮文字必须是 " "，不能是空字符串，否则 Streamlit 会报错或渲染异常
                         with c2.popover(" ", use_container_width=True):
                             # 1. 置顶/取消置顶按钮
                             pin_text = "🚫 取消置顶" if is_pinned else "📌 置顶会话"
