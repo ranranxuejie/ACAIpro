@@ -65,17 +65,21 @@ def load_session_to_state(session_id, session_name, session_model, user_token):
                 formatted_time = formatted_time[:19]
             
             if record.get("userText"):
+                # 人的回答，使用useTokens
+                user_tokens = record.get("useTokens", 0) or 0
                 st.session_state.messages.append({
                     "role": "user", 
                     "content": record.get("userText"),
                     "updated": formatted_time,  # 使用格式化后的时间
                     "model": current_model,  # 会话级别的模型信息
+                    "useTokens": user_tokens,  # 人的回答使用useTokens
+                    "tokens": user_tokens,  # 保持兼容性
                     "files": use_files, 
                     "file_name": record.get("fileName", "")
                 })
             if record.get("aiText"):
-                # 从API返回的数据中获取tokens，尝试多种可能的字段名
-                tokens_used = record.get("useTokens", 0) or record.get("completionTokens", 0) or record.get("tokens", 0)
+                # AI回答，使用completionTokens
+                ai_tokens = record.get("completionTokens", 0) or 0
                 
                 # 获取AI消息的时间
                 ai_time = record.get("updated", "") or created_time
@@ -85,8 +89,8 @@ def load_session_to_state(session_id, session_name, session_model, user_token):
                 st.session_state.messages.append({
                     "role": "assistant", 
                     "content": record.get("aiText"),
-                    "tokens": tokens_used,
-                    "useTokens": tokens_used,  # 同时保存为useTokens，保持与handle_user_input一致
+                    "tokens": ai_tokens,  # AI回答使用completionTokens
+                    "useTokens": ai_tokens,  # 保持与handle_user_input一致
                     "updated": ai_time,  # 使用AI消息的时间
                     "model": current_model,  # 会话级别的模型信息
                     "record_model": record.get("model", "")  # 记录级别的模型信息（备用）
