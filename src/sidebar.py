@@ -41,38 +41,59 @@ def load_session_to_state(session_id, session_name, session_model, user_token):
     st.session_state.bot.token = user_token
     st.session_state.bot.session_id = session_id
 
-    st.session_state.selected_model = session_model or "gemini-3-pro-preview"
-    st.session_state.current_session_model = st.session_state.selected_model
+    # 会话模型信息
+    current_model = session_model or "gemini-3-pro-preview"
+    st.session_state.selected_model = current_model
+    st.session_state.current_session_model = current_model
     st.session_state.status = f"✅ 已连接: {session_name}"
     st.session_state.messages = [] 
     st.session_state.useFiles = [] 
 
     success, data = st.session_state.bot.get_chat_records(session_id)
-        if success and data.get("records"):
-            for record in reversed(data["records"]):
-                use_files = record.get("useFiles", []) or []
-                if record.get("userText"):
-                    st.session_state.messages.append({
-                        "role": "user", 
-                        "content": record.get("userText"),
-                        "updated": record.get("created", ""),
-                        "files": use_files, 
-                        "file_name": record.get("fileName", "")
-                    })
-                if record.get("aiText"):
-                    # 从API返回的数据中获取tokens，尝试多种可能的字段名
-                    tokens_used = record.get("useTokens", 0) or record.get("completionTokens", 0) or record.get("tokens", 0)
-                    st.session_state.messages.append({
-                        "role": "assistant", 
-                        "content": record.get("aiText"),
-                        "tokens": tokens_used,
-                        "useTokens": tokens_used,  # 同时保存为useTokens，保持与handle_user_input一致
-                        "updated": record.get("updated", ""),
-                        "model": record.get("model", "")  # 添加模型信息
-                    })
-                for file in use_files:
-                    if not any(f.get("name") == file.get("name") for f in st.session_state.useFiles):
-                        st.session_state.useFiles.append(file)
+    if success and data.get("records"):
+        # 为每条消息设置统一的模型信息
+        for record in reversed(data["records"]):
+            use_files = record.get("useFiles", []) or []
+            
+            # 从API返回的数据中获取时间，处理不同的字段名
+            created_time = record.get("created", "") or record.get("updated", "") or ""
+            
+            # 格式化时间显示
+            formatted_time = created_time
+            if formatted_time and len(formatted_time) > 19:
+                # 只保留到秒，去除毫秒部分
+                formatted_time = formatted_time[:19]
+            
+            if record.get("userText"):
+                st.session_state.messages.append({
+                    "role": "user", 
+                    "content": record.get("userText"),
+                    "updated": formatted_time,  # 使用格式化后的时间
+                    "model": current_model,  # 会话级别的模型信息
+                    "files": use_files, 
+                    "file_name": record.get("fileName", "")
+                })
+            if record.get("aiText"):
+                # 从API返回的数据中获取tokens，尝试多种可能的字段名
+                tokens_used = record.get("useTokens", 0) or record.get("completionTokens", 0) or record.get("tokens", 0)
+                
+                # 获取AI消息的时间
+                ai_time = record.get("updated", "") or created_time
+                if ai_time and len(ai_time) > 19:
+                    ai_time = ai_time[:19]
+                
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": record.get("aiText"),
+                    "tokens": tokens_used,
+                    "useTokens": tokens_used,  # 同时保存为useTokens，保持与handle_user_input一致
+                    "updated": ai_time,  # 使用AI消息的时间
+                    "model": current_model,  # 会话级别的模型信息
+                    "record_model": record.get("model", "")  # 记录级别的模型信息（备用）
+                })
+            for file in use_files:
+                if not any(f.get("name") == file.get("name") for f in st.session_state.useFiles):
+                    st.session_state.useFiles.append(file)
         st.toast(f"已加载: {session_name}", icon="✅")
     else:
         st.toast(f"已切换 (无记录)", icon="✅")
