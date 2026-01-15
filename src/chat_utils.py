@@ -1,6 +1,7 @@
 # 聊天工具模块 - 存放聊天相关的共享功能
 import streamlit as st
 import re
+from streamlit_extras.badges import badge
 from .file_utils import format_file_attachments
 from st_copy import copy_button
 
@@ -18,7 +19,7 @@ def clean_ai_text(text):
 # 生成徽章 HTML
 def render_badges(tokens=0, time_str="", model_name=""):
     """
-    生成底部的元数据徽章 HTML
+    生成底部的元数据徽章 HTML，使用 streamlit_extras.badges 的样式
     
     Args:
         tokens (int): Tokens 使用量
@@ -28,32 +29,34 @@ def render_badges(tokens=0, time_str="", model_name=""):
     Returns:
         str: 生成的 HTML 字符串
     """
+    # 使用 streamlit_extras.badges 的样式
+    badge_style = ""
+    
+    # 构建徽章列表
+    badges = []
+    
     # 如果 tokens 为 0 或 None，不显示 Token 徽章
-    token_html = ""
     if tokens:
-        token_html = f"""
-        <div style="background-color: rgba(255, 75, 75, 0.15); color: #ff4b4b; border: 0px solid rgba(255, 75, 75, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; display: flex; align-items: center;">
-            <span style="margin-right: 4px;">💡</span> {tokens}
-        </div>
-        """
+        badges.append(f"💳 {tokens} Tokens")
     
     # 如果时间为空，也不显示时间徽章
-    time_html = ""
     if time_str:
-         time_html = f"""
-        <div style="background-color: rgba(33, 195, 84, 0.15); color: #21c354; border: 0px solid rgba(33, 195, 84, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; display: flex; align-items: center;">
-            <span style="margin-right: 4px;">⏰</span> {time_str}
-        </div>
-        """
-
+        badges.append(f"⌚️ {time_str}")
+    
+    # 始终显示模型徽章
+    badges.append(f"📛 {model_name}")
+    
+    if not badges:
+        return ""
+    
+    # 生成 HTML - 使用更现代、美观的样式，增加文字亮度
     return f"""
     <div style="display: flex; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px;">
-        {token_html}
-        {time_html}
-        <!-- 模型 标签 (蓝色风格) -->
-        <div style="background-color: rgba(0, 104, 201, 0.15); color: #0068c9; border: 0px solid rgba(0, 104, 201, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; display: flex; align-items: center;">
-            <span style="margin-right: 4px;">🤖</span> {model_name}
+        {''.join([f"""
+        <div style="background-color: rgba(0, 0, 0, 0.05); color: #999; border: 1px solid rgba(0, 0, 0, 0.1); padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; white-space: nowrap; display: flex; align-items: center; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);">
+            {badge_text}
         </div>
+        """ for badge_text in badges])}
     </div>
     """
 
@@ -104,91 +107,97 @@ def render_chat_message(msg_obj, message_index, model_name="Unknown"):
             if main_content:
                 st.markdown(main_content)
         
-        # 操作按钮组
+        # 使用传统的columns布局，将操作按钮放在一个横向栏目中
         if role == "assistant":
-            # AI消息：显示复制和删除按钮
-            # 调整列宽：给 action_col3 更多空间 (0.8)，因为它要放三个标签
-            action_col1, action_col2, action_col3 = st.columns([0.1, 0.1, 0.8], vertical_alignment="center")
-        else:
-            # 用户消息：只显示复制按钮
-            action_col1, action_col3 = st.columns([0.1, 0.9], vertical_alignment="center")
-
-        # 1. 复制按钮
-        with action_col1:
-            # 准备要复制的文本
-            if role == "assistant":
-                text_to_copy = clean_ai_text(content)
-            else:
-                text_to_copy = content
+            # AI消息：将复制、删除按钮放在一个横向栏目中，右侧显示徽章
+            buttons_col, badges_col = st.columns([0.2, 0.8], vertical_alignment="center")
             
-            copy_button(text_to_copy)
-        
-        # 2. 删除按钮（仅AI消息显示）
-        if role == "assistant":
-            with action_col2:
-                # 从消息对象中获取必要的删除参数
-                cid = msg_obj.get("cid") or msg_obj.get("id")
-                sid = msg_obj.get("sid") or msg_obj.get("sessionId") or msg_obj.get("session_id")
-                task_id = msg_obj.get("taskId") or msg_obj.get("task_id")
+            with buttons_col:
+                # 在按钮栏目中创建两个子列，横向排列复制和删除按钮
+                copy_col, delete_col, reserve_col = st.columns([1, 1, 1], gap="small", vertical_alignment="center")
                 
-                # 检查是否有删除所需的参数
-                if cid and sid:
-                    # 使用popover实现确认弹窗
-                    with st.popover(":wastebasket:", help="删除本组回答"):
-                        st.warning("确定要删除本组回答吗？此操作不可恢复。")
-                        
-                        # 确认删除按钮
-                        if st.button("确认删除", key=f"confirm_delete_{message_index}", type="primary", help="确认删除本组回答"):
-                            # 调用core.py中的delete_chat_record方法
-                            from .core import AIClient
-                            if st.session_state.bot:
-                                # 使用现有的bot实例
-                                success, message = st.session_state.bot.delete_chat_record(cid, sid, task_id)
-                                if success:
-                                    st.toast(message, icon="✅")
-                                    
-                                    # 刷新session：重新获取会话记录并更新session_state
-                                    bot = st.session_state.bot
-                                    session_id = bot.session_id
-                                    
-                                    # 重新获取会话记录
-                                    success_records, data_records = bot.get_chat_records(session_id)
-                                    if success_records and data_records.get("records"):
-                                        # 清空当前消息
-                                        st.session_state.messages = []
-                                        st.session_state.useFiles = []
+                # 1. 复制按钮
+                with copy_col:
+                    text_to_copy = clean_ai_text(content)
+                    copy_button(text_to_copy)
+                
+                # 2. 删除按钮
+                with delete_col:
+                    # 从消息对象中获取必要的删除参数
+                    cid = msg_obj.get("cid") or msg_obj.get("id")
+                    sid = msg_obj.get("sid") or msg_obj.get("sessionId") or msg_obj.get("session_id")
+                    task_id = msg_obj.get("taskId") or msg_obj.get("task_id")
+                    
+                    # 检查是否有删除所需的参数
+                    if cid and sid:
+                        # 使用popover实现确认弹窗
+                        with st.popover(":wastebasket:", help="删除本组回答"):
+                            st.warning("确定要删除本组回答吗？此操作不可恢复。")
+                            
+                            # 确认删除按钮
+                            if st.button("确认删除", key=f"confirm_delete_{message_index}", type="primary", help="确认删除本组回答"):
+                                # 调用core.py中的delete_chat_record方法
+                                from .core import AIClient
+                                if st.session_state.bot:
+                                    # 使用现有的bot实例
+                                    success, message = st.session_state.bot.delete_chat_record(cid, sid, task_id)
+                                    if success:
+                                        st.toast(message, icon="✅")
                                         
-                                        # 重新加载会话记录
-                                        from .sidebar import load_session_to_state
+                                        # 刷新session：重新获取会话记录并更新session_state
+                                        bot = st.session_state.bot
+                                        session_id = bot.session_id
                                         
-                                        # 获取当前模型名称
-                                        current_model = st.session_state.get("current_session_model", "Unknown")
+                                        # 重新获取会话记录
+                                        success_records, data_records = bot.get_chat_records(session_id)
+                                        if success_records and data_records.get("records"):
+                                            # 清空当前消息
+                                            st.session_state.messages = []
+                                            st.session_state.useFiles = []
+                                            
+                                            # 重新加载会话记录
+                                            from .sidebar import load_session_to_state
+                                            
+                                            # 获取当前模型名称
+                                            current_model = st.session_state.get("current_session_model", "Unknown")
+                                            
+                                            # 重新加载会话到状态
+                                            load_session_to_state(
+                                                session_id,
+                                                "",  # 会话名称，这里不需要
+                                                current_model,
+                                                bot.token
+                                            )
                                         
-                                        # 重新加载会话到状态
-                                        load_session_to_state(
-                                            session_id,
-                                            "",  # 会话名称，这里不需要
-                                            current_model,
-                                            bot.token
-                                        )
-                                    
-                                    # 重新渲染页面以更新聊天记录
-                                    st.rerun()
+                                        # 重新渲染页面以更新聊天记录
+                                        st.rerun()
+                                    else:
+                                        st.toast(f"删除失败: {message}", icon="❌")
                                 else:
-                                    st.toast(f"删除失败: {message}", icon="❌")
-                            else:
-                                st.toast("请先连接会话！", icon="⚠️")
-                        
-                        # 取消按钮
-                        if st.button("取消", key=f"cancel_delete_{message_index}", help="取消删除操作"):
-                            # 关闭popover
-                            pass
-                else:
-                    # 如果缺少参数，显示禁用的删除按钮
-                    st.button(":wastebasket:", key=f"delete_{message_index}", disabled=True, help="缺少删除所需的参数")
+                                    st.toast("请先连接会话！", icon="⚠️")
+                            
+                            # 取消按钮
+                            if st.button("取消", key=f"cancel_delete_{message_index}", help="取消删除操作"):
+                                # 关闭popover
+                                pass
+                    else:
+                        # 如果缺少参数，显示禁用的删除按钮
+                        st.button(":wastebasket:", disabled=True, help="缺少删除所需的参数", key=f"delete_disabled_{message_index}")
+                
+                # 3. 预留按钮位置，用于后续功能扩展
+                with reserve_col:
+                    pass
+        else:
+            # 用户消息：只显示复制按钮和徽章
+            buttons_col, badges_col = st.columns([0.1, 0.9], vertical_alignment="center")
+            
+            with buttons_col:
+                # 1. 复制按钮
+                text_to_copy = content
+                copy_button(text_to_copy)
 
-        # 3. 信息标签组 (Tokens | 时间 | 模型)
-        with action_col3:
+        # 4. 信息标签组 (Tokens | 时间 | 模型)
+        with badges_col:
             # 获取数据
             use_tokens = msg_obj.get("useTokens", msg_obj.get("tokens", 0))
             updated_time = msg_obj.get("updated", msg_obj.get("timestamp", ""))

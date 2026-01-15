@@ -7,14 +7,14 @@ from .utils import process_ai_content
 from .file_utils import format_file_attachments
 from .styles import apply_global_styles
 from .chat_utils import clean_ai_text, render_badges
-from st_copy import copy_button
+
 
 # 渲染输入区域
 def render_input_area():
     """
     渲染输入区域组件
     """
-    
+    # 恢复为原来的实现，不使用Streamlit Extras
     chat_input = st.chat_input(
         placeholder="询问任何问题...",
         key="chat_input",
@@ -32,6 +32,10 @@ def render_input_area():
             st.toast(f"已上传文件: {uploaded_file.name}", icon="✅")
         
         handle_user_input(prompt, uploaded_file)
+        
+        # 显示成功动画
+        from .styles import show_success_animation
+        show_success_animation()
 # 处理用户输入
 def handle_user_input(prompt, uploaded_file):
     """
@@ -60,13 +64,13 @@ def handle_user_input(prompt, uploaded_file):
         
         st.text(prompt)
         
-        # 操作按钮和信息标签
-        action_col1, action_col2 = st.columns([0.08, 0.92], vertical_alignment="center")
+        # 操作按钮和信息标签 - 将操作按钮放在一个横向栏目中
+        buttons_col, badges_col = st.columns([0.1, 0.9], vertical_alignment="center")
         
-        with action_col1:
+        with buttons_col:
             copy_button(prompt)
         
-        with action_col2:
+        with badges_col:
             # 1. 创建用户徽章的占位符
             user_badges_placeholder = st.empty()
             # 2. 初始渲染（使用本地时间，Tokens=0）
@@ -113,19 +117,28 @@ def handle_user_input(prompt, uploaded_file):
                 except:
                     pass
             
-            # 4. 更新 AI 的操作栏和徽章
-            # 显示复制按钮
-            action_col1, action_col2 = st.columns([0.08, 0.92], vertical_alignment="center")
-            with action_col1:
-                text_to_copy = clean_ai_text(full_response)
-                copy_button(text_to_copy)
+            # 4. 更新 AI 的操作栏和徽章 - 将操作按钮放在一个横向栏目中
+            # 显示复制、删除按钮和评分
+            buttons_col, badges_col = st.columns([0.2, 0.8], vertical_alignment="center")
             
-            with action_col2:
+            with buttons_col:
+                # 在按钮栏目中创建两个子列，横向排列复制和删除按钮
+                copy_col, delete_col, reserve_col = st.columns([1, 1, 1], gap="small", vertical_alignment="center")
+                
+                with copy_col:
+                    text_to_copy = clean_ai_text(full_response)
+                    copy_button(text_to_copy)
+                
+                with delete_col:
+                    # 占位符，用于后续添加删除按钮
+                    pass
+                
+                with reserve_col:
+                    # 占位符，用于后续添加评分功能
+                    pass
+            
+            with badges_col:
                 # 渲染最终的 AI 徽章（包含真实Tokens和API时间）
-                # 注意：这里我们覆盖之前的占位符，其实可以直接在这里显示，
-                # 但为了布局一致，还是把 badges 放在 col2 里，
-                # 上面定义的 ai_badges_placeholder 其实可以用作加载中的占位，或者直接不使用占位符，在最后渲染。
-                # 考虑到 columns 的作用域，这里直接在 col2 渲染是最好的。
                 st.html(render_badges(tokens=final_tokens, time_str=final_time, model_name=current_model))
 
             # 5. 回填更新 用户 的徽章 (关键步骤)

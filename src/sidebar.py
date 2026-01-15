@@ -1,5 +1,7 @@
 # 侧边栏模块 - 处理侧边栏组件
 import streamlit as st
+from streamlit_extras.grid import grid
+from streamlit_extras.colored_header import colored_header
 from .core import AIClient
 from .config import CONFIG
 from datetime import datetime
@@ -366,21 +368,28 @@ def render_session_list(user_token):
         for g_name in group_order:
             if g_name in groups:
                 if not query:
-                    # 标题和分割线 (CSS会自动让它们跨整行)
-                    st.markdown(f'<div class="session-group-header">{g_name}</div>', unsafe_allow_html=True)
+                    # 使用colored_header增强标题视觉效果
+                    colored_header(
+                        label=g_name,
+                        description="",
+                        color_name="blue-70"
+                    )
                     st.markdown("---")
 
+                # 使用传统的columns布局，确保会话列表有足够宽度
+                # 为每个会话创建一个容器
                 for s in groups[g_name]:
                     s_id = s.get("id")
                     s_name = s.get("name", "未命名")
                     is_active = (st.session_state.bot and str(s_id) == str(st.session_state.bot.session_id))
                     is_pinned = s.get("topSort") == 1
 
+                    # 使用单个列容器，确保会话项有足够宽度
                     with st.container():
-                        # 比例 0.75 : 0.25
-                        c1, c2 = st.columns([0.75, 0.25], gap="small")
+                        # 比例 0.85 : 0.15，增加会话名称显示空间
+                        c1, c2 = st.columns([0.85, 0.15], gap="small")
 
-                        # A. 切换按钮
+                        # A. 切换按钮 - 增加按钮宽度，提高可用性
                         if c1.button(s_name, key=f"s_{s_id}", type="primary" if is_active else "secondary", use_container_width=True, help=f"模型: {s.get('model')}"):
                             if user_token:
                                 load_session_to_state(s_id, s_name, s.get("model"), user_token)

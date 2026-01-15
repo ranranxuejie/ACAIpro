@@ -1,8 +1,8 @@
 # 样式模块 - 存储共享的CSS样式
+from streamlit_extras.let_it_rain import rain
 
 # 共享的CSS样式
-global_css = """
-<style>
+global_css = """<style>
 /* 设置代码块样式 */
 .stMarkdown pre {
     max-height: 300px;
@@ -39,8 +39,21 @@ global_css = """
     margin-left: 0.5rem !important;
     margin-right: 0 !important;
 }
-</style>
-"""
+
+/* Streamlit Extras 组件样式优化 */
+.stStarRating {
+    margin: 0 !important;
+}
+
+.stPopoverBody {
+    padding: 10px !important;
+}
+
+/* 优化网格布局 */
+[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] {
+    gap: 0.5rem !important;
+}
+</style>"""
 
 # 应用共享样式
 def apply_global_styles():
@@ -48,4 +61,30 @@ def apply_global_styles():
     应用共享的CSS样式
     """
     import streamlit as st
+    
+    # 应用CSS样式
     st.markdown(global_css, unsafe_allow_html=True)
+
+# 成功动画效果
+def show_success_animation():
+    """
+    显示成功动画效果
+    """
+    rain(
+        emoji="🎉",
+        font_size=24,
+        falling_speed=5,
+        animation_length="1s"
+    )
+
+# 欢迎动画效果
+def show_welcome_animation():
+    """
+    显示欢迎动画效果
+    """
+    rain(
+        emoji="👋",
+        font_size=32,
+        falling_speed=3,
+        animation_length="2s"
+    )

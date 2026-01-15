@@ -11,8 +11,8 @@ from src import (
 
 # 1. 页面基础设置
 st.set_page_config(
-    page_title="Raran AI Pro", 
-    page_icon="☢️", 
+    page_title="Secret", 
+    page_icon="🔞", 
     layout="wide",
     initial_sidebar_state="auto"
 )
