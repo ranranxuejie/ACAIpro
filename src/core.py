@@ -231,6 +231,40 @@ class AIClient:
             return False, f"HTTP {response.status_code}"
         except Exception as e:
             return False, str(e)
+    
+    def delete_chat_record(self, cid, sid, task_id=""):
+        """
+        删除指定的聊天记录
+        
+        Args:
+            cid (str): 聊天记录ID
+            sid (str): 会话ID
+            task_id (str, optional): 任务ID
+            
+        Returns:
+            tuple: (成功状态, 消息)
+        """
+        # 构建请求URL
+        url = f"{self.base_url}/chat/record?cid={cid}&sid={sid}"
+        if task_id:
+            url += f"&taskId={task_id}"
+        
+        try:
+            response = requests.delete(url, headers=self.headers)
+            if response.status_code == 200:
+                # 检查API返回的JSON格式
+                try:
+                    res_json = response.json()
+                    if res_json.get("code") == 0:
+                        return True, "聊天记录删除成功"
+                    else:
+                        return False, res_json.get('msg', "删除失败")
+                except json.JSONDecodeError:
+                    # 如果返回的不是JSON格式，可能是直接返回成功信息
+                    return True, "聊天记录删除成功"
+            return False, f"HTTP {response.status_code}"
+        except Exception as e:
+            return False, str(e)
 
     def chat_stream(self, user_text, file_obj=None):
         """
