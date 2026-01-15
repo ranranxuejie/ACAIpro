@@ -6,48 +6,8 @@ from .core import AIClient
 from .utils import process_ai_content
 from .file_utils import format_file_attachments
 from .styles import apply_global_styles
+from .chat_utils import clean_ai_text, render_badges
 from st_copy import copy_button
-# 辅助函数：生成徽章 HTML
-def render_badges(tokens=0, time_str="", model_name=""):
-    """
-    生成底部的元数据徽章 HTML
-    """
-    # 如果 tokens 为 0 或 None，不显示 Token 徽章
-    token_html = ""
-    if tokens:
-        token_html = f"""
-        <div style="background-color: rgba(255, 75, 75, 0.15); color: #ff4b4b; border: 0px solid rgba(255, 75, 75, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; display: flex; align-items: center;">
-            <span style="margin-right: 4px;">💡</span> {tokens}
-        </div>
-        """
-    
-    # 如果时间为空，也不显示时间徽章（或者显示占位符）
-    time_html = ""
-    if time_str:
-         time_html = f"""
-        <div style="background-color: rgba(33, 195, 84, 0.15); color: #21c354; border: 0px solid rgba(33, 195, 84, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; display: flex; align-items: center;">
-            <span style="margin-right: 4px;">⏰</span> {time_str}
-        </div>
-        """
-
-    return f"""
-    <div style="display: flex; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px;">
-        {token_html}
-        {time_html}
-        <!-- 模型 标签 (蓝色风格) -->
-        <div style="background-color: rgba(0, 104, 201, 0.15); color: #0068c9; border: 0px solid rgba(0, 104, 201, 0.3); padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; display: flex; align-items: center;">
-            <span style="margin-right: 4px;">🤖</span> {model_name}
-        </div>
-    </div>
-    """
-# 清洗 AI 文本的辅助函数
-def clean_ai_text(text):
-    """
-    清洗 AI 文本：移除 think 标签
-    """
-    pattern = r""
-    cleaned_text = re.sub(pattern, "", text, flags=re.DOTALL)
-    return cleaned_text.strip()
 
 # 渲染输入区域
 def render_input_area():
@@ -179,6 +139,11 @@ def handle_user_input(prompt, uploaded_file):
 
     # --- 保存历史记录 ---
     
+    # 从 bot 对象获取元数据和会话信息
+    bot = st.session_state.bot
+    last_metadata = getattr(bot, 'last_chat_metadata', {})
+    session_id = getattr(bot, 'session_id', '')
+    
     # 保存用户消息 (包含文件信息)
     user_message = {
         "role": "user",
@@ -186,7 +151,10 @@ def handle_user_input(prompt, uploaded_file):
         "file_name": file_name_record,
         "tokens": 0,
         "files": [],
-        "timestamp": final_time # 保存时间以便历史记录显示
+        "timestamp": final_time, # 保存时间
+        "cid": last_metadata.get("id", ""),  # 保存删除所需的参数
+        "sid": session_id,
+        "taskId": last_metadata.get("taskId", "")
     }
     
     if file_name_record:
@@ -206,7 +174,10 @@ def handle_user_input(prompt, uploaded_file):
         "content": full_response,
         "tokens": final_tokens,
         "useTokens": final_tokens,
-        "timestamp": final_time # 保存时间
+        "timestamp": final_time, # 保存时间
+        "cid": last_metadata.get("id", ""),  # 保存删除所需的参数
+        "sid": session_id,
+        "taskId": last_metadata.get("taskId", "")
     })
     
     # 自动滚动脚本

@@ -64,6 +64,11 @@ def load_session_to_state(session_id, session_name, session_model, user_token):
                 # 只保留到秒，去除毫秒部分
                 formatted_time = formatted_time[:19]
             
+            # 从record中提取删除所需的参数
+            record_id = record.get("id") or record.get("recordId") or record.get("record_id")
+            session_id_from_record = record.get("sessionId") or record.get("session_id") or session_id
+            task_id = record.get("taskId") or record.get("task_id")
+            
             if record.get("userText"):
                 # 人的回答，使用useTokens
                 user_tokens = record.get("useTokens", 0) or 0
@@ -75,7 +80,10 @@ def load_session_to_state(session_id, session_name, session_model, user_token):
                     "useTokens": user_tokens,  # 人的回答使用useTokens
                     "tokens": user_tokens,  # 保持兼容性
                     "files": use_files, 
-                    "file_name": record.get("fileName", "")
+                    "file_name": record.get("fileName", ""),
+                    "cid": record_id,  # 保存删除所需的参数
+                    "sid": session_id_from_record,
+                    "taskId": task_id
                 })
             if record.get("aiText"):
                 # AI回答，使用completionTokens
@@ -93,7 +101,10 @@ def load_session_to_state(session_id, session_name, session_model, user_token):
                     "useTokens": ai_tokens,  # 保持与handle_user_input一致
                     "updated": ai_time,  # 使用AI消息的时间
                     "model": current_model,  # 会话级别的模型信息
-                    "record_model": record.get("model", "")  # 记录级别的模型信息（备用）
+                    "record_model": record.get("model", ""),  # 记录级别的模型信息（备用）
+                    "cid": record_id,  # 保存删除所需的参数
+                    "sid": session_id_from_record,
+                    "taskId": task_id
                 })
             for file in use_files:
                 if not any(f.get("name") == file.get("name") for f in st.session_state.useFiles):
@@ -336,7 +347,7 @@ def render_session_list(user_token):
         sessions = [s for s in st.session_state.sessions if not query or query.lower() in (s.get("name") or "").lower()]
 
         # 2. 排序
-        sessions.sort(key=lambda x: (x.get('topSort', 0), x.get('created', '')), reverse=True)
+        sessions.sort(key=lambda x: (x.get('topSort', 0), x.get('updated', '')), reverse=True)
 
         if not sessions:
             st.caption("无匹配会话")
@@ -348,7 +359,7 @@ def render_session_list(user_token):
 
         for s in sessions:
             is_pinned = s.get('topSort') == 1
-            g = get_session_group(s.get('created'), is_pinned=is_pinned)
+            g = get_session_group(s.get('updated'), is_pinned=is_pinned)
             groups.setdefault(g, []).append(s)
 
         # 4. 渲染
