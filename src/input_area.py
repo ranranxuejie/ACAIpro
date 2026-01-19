@@ -7,6 +7,7 @@ from .utils import process_ai_content
 from .file_utils import format_file_attachments
 from .styles import apply_global_styles
 from .chat_utils import clean_ai_text, render_badges
+from st_copy import copy_button
 
 
 # 渲染输入区域
