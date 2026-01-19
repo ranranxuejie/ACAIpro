@@ -1,4 +1,5 @@
 # AI 助手 Pro 主程序
+import streamlit as st
 from src import render_ui
 
 # 1. 页面基础设置
