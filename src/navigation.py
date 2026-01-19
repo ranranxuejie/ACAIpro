@@ -35,48 +35,34 @@ def render_navigation_bar():
     if "scroll_to_message" in st.session_state:
         scroll_index = st.session_state["scroll_to_message"]
         
-        # 输出滚动脚本
-        st.markdown(f"""
+        # 修复f-string语法错误，转义JavaScript的花括号
+        scroll_script = f"""
         <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function() {{
             console.log('滚动到消息索引:', {scroll_index});
             
             // 获取所有聊天消息元素
             const chatMessages = document.querySelectorAll('[data-testid="stChatMessage"]');
             console.log('找到的消息数量:', chatMessages.length);
             
-            if (chatMessages.length > {scroll_index}) {
+            if (chatMessages.length > {scroll_index}) {{
                 const targetMessage = chatMessages[{scroll_index}];
                 console.log('目标消息:', targetMessage);
                 
                 // 滚动到目标消息
-                targetMessage.scrollIntoView({
+                targetMessage.scrollIntoView({{
                     behavior: 'smooth',
                     block: 'center'
-                });
+                }});
                 
                 // 高亮显示目标消息
                 targetMessage.style.boxShadow = '0 0 20px rgba(66, 133, 244, 0.5)';
-                setTimeout(() => {
+                setTimeout(() => {{
                     targetMessage.style.boxShadow = 'none';
-                }, 2000);
-            }
-            
-            // 清除滚动标记
-            delete st.session_state["scroll_to_message"];
-        });
+                }}, 2000);
+            }}
+        }});
         </script>
-        """, unsafe_allow_html=True)
-    
-    # 添加样式，确保按钮美观
-    st.markdown("""
-    <style>
-    /* 导航按钮样式 */
-    .stButton > button {
-        margin-bottom: 8px !important;
-        border-radius: 8px !important;
-        font-size: 14px !important;
-        padding: 8px 12px !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+        """
+        
+        st.markdown(scroll_script, unsafe_allow_html=True)
