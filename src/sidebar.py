@@ -130,8 +130,8 @@ def inject_custom_css():
        【关键修改】响应式网格布局逻辑
        ================================================================================= */
 
-    /* 1. 将 Expand Details 内部的容器转为 CSS Grid */
-    div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] {
+    /* 1. 将 Expand Details 内部的容器转为 CSS Grid - 只影响侧边栏 */
+    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] {
         display: grid !important;
         /* 核心：自动填充，最小宽度 135px。侧边栏拉宽时会自动一行排两个，窄时排一个 */
         grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
@@ -139,21 +139,21 @@ def inject_custom_css():
         padding-right: 2px;
     }
 
-    /* 2. 让直接子元素填满网格单元 */
-    div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] > div {
+    /* 2. 让直接子元素填满网格单元 - 只影响侧边栏 */
+    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] > div {
         width: 100% !important;
     }
 
-    /* 3. 【特殊处理】让包含"标题"和"分割线"的元素跨越整行（不被分栏） */
+    /* 3. 【特殊处理】让包含"标题"和"分割线"的元素跨越整行（不被分栏） - 只影响侧边栏 */
     /* 使用 :has() 选择器检查是否包含特定类名或 HR 标签 */
-    div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] > div:has(.session-group-header),
-    div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] > div:has(hr) {
+    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] > div:has(.session-group-header),
+    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] > div:has(hr) {
         grid-column: 1 / -1 !important; /* 强制跨越所有列 */
         margin-top: 5px !important;
     }
 
-    /* 4. 卡片化样式：为每个会话项增加背景和边框，使其像一个小磁贴 */
-    div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] {
+    /* 4. 卡片化样式：为每个会话项增加背景和边框，使其像一个小磁贴 - 只影响侧边栏 */
+    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] {
         background-color: rgba(128, 128, 128, 0.04);
         border: 1px solid rgba(128, 128, 128, 0.08);
         border-radius: 6px;
@@ -163,8 +163,8 @@ def inject_custom_css():
         height: 100% !important; /* 确保高度一致 */
     }
 
-    /* 悬停卡片效果 */
-    div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"]:hover {
+    /* 悬停卡片效果 - 只影响侧边栏 */
+    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"]:hover {
         background-color: rgba(128, 128, 128, 0.08);
         border-color: rgba(128, 128, 128, 0.2);
         transform: translateY(-1px);
@@ -222,28 +222,28 @@ def inject_custom_css():
         transition: opacity 0.2s !important;
     }
 
-    /* 卡片悬停时，显示右侧按钮 */
-    div[data-testid="stHorizontalBlock"]:hover div[data-testid="column"]:last-child button { 
+    /* 卡片悬停时，显示右侧按钮 - 只影响侧边栏 */
+    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"]:hover div[data-testid="column"]:last-child button { 
         opacity: 0.5; 
     }
 
-    /* 按钮自身悬停时高亮 */
-    div[data-testid="stHorizontalBlock"] div[data-testid="column"]:last-child button:hover {
+    /* 按钮自身悬停时高亮 - 只影响侧边栏 */
+    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:last-child button:hover {
         opacity: 1 !important; 
         background-color: rgba(128, 128, 128, 0.15) !important;
         border-radius: 4px !important;
         position: relative;
     }
 
-    /* Hover 显示三点图标 */
-    div[data-testid="stHorizontalBlock"] div[data-testid="column"]:last-child button:hover::after {
+    /* Hover 显示三点图标 - 只影响侧边栏 */
+    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:last-child button:hover::after {
         content: "⋮";
         position: absolute;
         color: #666;
         font-weight: bold;
     }
 
-    div[data-testid="stExpanderDetails"] div[data-testid="column"]:last-child button svg { display: none !important; }
+    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] div[data-testid="column"]:last-child button svg { display: none !important; }
 
     /* 分组标题 */
     .session-group-header {
