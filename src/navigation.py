@@ -1,117 +1,115 @@
+# 导航模块 - 处理消息导航和跳转功能
 import streamlit as st
 
-def render_right_sidebar_nav(message_pairs):
+# 渲染右侧侧边栏导航
+def render_right_sidebar_nav(qa_count):
     """
-    渲染右侧悬浮导航栏 (点-线 样式)
-
+    渲染右侧固定的导航栏，提供快速跳转到不同消息的功能
+    参考Gemini的设计风格
+    
     Args:
-        message_pairs (int): 对话组的数量 (用户+AI算一组)
+        qa_count (int): 对话组数量
     """
-    if message_pairs <= 0:
+    if qa_count == 0:
         return
-
-    # 生成每个点的 HTML
-    # 我们假设每组对话对应一个锚点 id 为 'msg-anchor-0', 'msg-anchor-1'...
-    steps_html = ""
-    for i in range(message_pairs):
-        steps_html += f"""
-        <div class="nav-step" onclick="scrollToMessage({i})" title="跳转到第 {i+1} 组对话">
-            <div class="nav-dot"></div>
-            {'<div class="nav-line"></div>' if i < message_pairs - 1 else ''}
+    
+    # 输出CSS和HTML，实现右侧固定导航栏
+    html_content = """
+    <style>
+    /* 右侧导航栏容器 */
+    .right-sidebar-nav {
+        position: fixed !important;
+        right: 20px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        z-index: 9999 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 8px !important;
+        background: rgba(255, 255, 255, 0.95) !important;
+        border-radius: 20px !important;
+        padding: 12px !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+        backdrop-filter: blur(10px) !important;
+    }
+    
+    /* 导航点样式 */
+    .nav-dot {
+        width: 16px !important;
+        height: 16px !important;
+        border-radius: 50% !important;
+        background-color: #e0e0e0 !important;
+        cursor: pointer !important;
+        transition: all 0.3s ease !important;
+        position: relative !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        color: #666 !important;
+    }
+    
+    /* 导航点悬停效果 */
+    .nav-dot:hover {
+        transform: scale(1.3) !important;
+        background-color: #ff4b4b !important;
+        color: white !important;
+        box-shadow: 0 0 10px rgba(255, 75, 75, 0.5) !important;
+    }
+    
+    /* 连接线样式 */
+    .nav-line {
+        width: 2px !important;
+        height: 20px !important;
+        background-color: #e0e0e0 !important;
+    }
+    </style>
+    
+    <!-- 右侧导航栏HTML -->
+    <div class="right-sidebar-nav">
+    """
+    
+    # 生成导航点和连接线
+    for i in range(qa_count):
+        # 导航点
+        html_content += f"""
+        <div class="nav-dot" onclick="scrollToMessage({i})" title="跳转到第 {i + 1} 组对话">
+            {i + 1}
         </div>
         """
-
-    # 注入完整的 HTML/CSS/JS
-    st.markdown(f"""
-    <style>
-    /* 1. 悬浮容器样式 */
-    #right-nav-container {{
-        position: fixed;
-        right: 20px;
-        top: 50%;
-        transform: translateY(-50%); /* 垂直居中 */
-        z-index: 9999;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        background: rgba(255, 255, 255, 0.8); /* 浅色背景 */
-        backdrop-filter: blur(5px);
-        padding: 15px 10px;
-        border-radius: 20px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        max-height: 80vh;
-        overflow-y: auto;
-        /* 隐藏滚动条但保留功能 */
-        scrollbar-width: none; 
-    }}
-
-    /* 深色模式适配 (可选，利用 Streamlit 的 data-theme 属性大概判断，或者直接用半透明) */
-    @media (prefers-color-scheme: dark) {{
-        #right-nav-container {{
-            background: rgba(40, 40, 40, 0.8);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        }}
-    }}
-
-    /* 2. 单个步骤容器 */
-    .nav-step {{
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        cursor: pointer;
-        position: relative;
-        transition: transform 0.2s;
-    }}
-
-    .nav-step:hover {{
-        transform: scale(1.2);
-    }}
-
-    /* 3. 点的样式 */
-    .nav-dot {{
-        width: 12px;
-        height: 12px;
-        background-color: #ddd;
-        border: 2px solid #aaa;
-        border-radius: 50%;
-        transition: all 0.3s;
-        z-index: 2; /* 保证点在线的上面 */
-    }}
-
-    .nav-step:hover .nav-dot {{
-        background-color: #FF4B4B; /* Streamlit 主题红 */
-        border-color: #FF4B4B;
-    }}
-
-    /* 4. 线的样式 */
-    .nav-line {{
-        width: 2px;
-        height: 25px; /* 点之间的距离 */
-        background-color: #eee;
-        margin: 2px 0;
-    }}
-
-    @media (prefers-color-scheme: dark) {{
-        .nav-dot {{ background-color: #555; border-color: #777; }}
-        .nav-line {{ background-color: #444; }}
-    }}
-
-    </style>
-
-    <div id="right-nav-container">
-        {steps_html}
-    </div>
-
+        
+        # 添加连接线（除了最后一个点）
+        if i < qa_count - 1:
+            html_content += "<div class='nav-line'></div>"
+    
+    # 关闭导航栏容器
+    html_content += "</div>"
+    
+    # 添加JavaScript
+    html_content += """
     <script>
-    function scrollToMessage(index) {{
-        // 寻找对应的锚点 ID
-        const element = document.getElementById('msg-anchor-' + index);
-        if (element) {{
-            // 平滑滚动，block: 'start' 让元素滚到视口顶部附近
-            element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
-        }} else {{
-            console.log('Anchor not found: msg-anchor-' + index);
-        }}
-    }}
+    // 滚动到指定消息
+    function scrollToMessage(index) {
+        console.log('滚动到消息:', index);
+        
+        // 获取锚点元素
+        const anchor = document.getElementById('msg-anchor-' + index);
+        if (anchor) {
+            console.log('找到锚点:', anchor);
+            
+            // 平滑滚动到锚点
+            anchor.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+        } else {
+            console.error('未找到锚点:', 'msg-anchor-' + index);
+        }
+    }
     </script>
-    """, unsafe_allow_html=True)
+    """
+    
+    # 渲染HTML内容
+    st.markdown(html_content, unsafe_allow_html=True)
