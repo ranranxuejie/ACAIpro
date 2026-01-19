@@ -282,9 +282,18 @@ class AIClient:
 
         files_data = []
         if file_obj:
-            processed_file = self.process_streamlit_file(file_obj)
-            if processed_file:
-                files_data.append(processed_file)
+            # 支持单个文件或多个文件
+            if isinstance(file_obj, list):
+                # 处理多个文件
+                for uploaded_file in file_obj:
+                    processed_file = self.process_streamlit_file(uploaded_file)
+                    if processed_file:
+                        files_data.append(processed_file)
+            else:
+                # 处理单个文件
+                processed_file = self.process_streamlit_file(file_obj)
+                if processed_file:
+                    files_data.append(processed_file)
 
         payload = {
             "sessionId": self.session_id,

@@ -19,7 +19,7 @@ def render_input_area():
     chat_input = st.chat_input(
         placeholder="询问任何问题...",
         key="chat_input",
-        accept_file=True,
+        accept_file="multiple",
         max_chars=None,
         accept_audio=True,
     )
@@ -27,20 +27,24 @@ def render_input_area():
     if chat_input:
         prompt = chat_input.get("text", "")
         uploaded_files = chat_input.get("files", [])
-        uploaded_file = uploaded_files[0] if uploaded_files else None
         
-        if uploaded_file:
-            st.toast(f"已上传文件: {uploaded_file.name}", icon="✅")
+        if uploaded_files:
+            file_names = ", ".join([f.name for f in uploaded_files])
+            st.toast(f"已上传文件: {file_names}", icon="✅")
         
-        handle_user_input(prompt, uploaded_file)
+        handle_user_input(prompt, uploaded_files)
         
         # 显示成功动画
         from .styles import show_success_animation
         show_success_animation()
 # 处理用户输入
-def handle_user_input(prompt, uploaded_file):
+def handle_user_input(prompt, uploaded_files):
     """
     处理用户输入
+    
+    Args:
+        prompt (str): 用户输入的文本
+        uploaded_files (list): 上传的文件列表
     """
     apply_global_styles()
     
@@ -54,7 +58,8 @@ def handle_user_input(prompt, uploaded_file):
     temp_time = datetime.now().strftime("%H:%M:%S")
 
     # --- 用户消息处理 ---
-    file_name_record = uploaded_file.name if uploaded_file else None
+    file_names = [f.name for f in uploaded_files] if uploaded_files else []
+    file_name_record = file_names[0] if file_names else None
 
     with st.chat_message("user"):
         # 文件显示逻辑
@@ -87,7 +92,7 @@ def handle_user_input(prompt, uploaded_file):
         
         # 迭代流式响应
         try:
-            for chunk in st.session_state.bot.chat_stream(prompt, uploaded_file):
+            for chunk in st.session_state.bot.chat_stream(prompt, uploaded_files):
                 full_response += chunk
                 main_content, think_content, is_thinking = process_ai_content(full_response)
                 
