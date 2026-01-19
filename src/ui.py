@@ -7,6 +7,7 @@ from .sidebar import render_sidebar
 from .chat_area import render_chat_area
 from .input_area import render_input_area
 from .auto_load import auto_load_data
+from .navigation import render_navigation_bar
 
 # 主UI函数
 def render_ui():
@@ -24,6 +25,9 @@ def render_ui():
     
     # 渲染聊天区域
     render_chat_area()
+    
+    # 渲染导航栏
+    render_navigation_bar()
     
     # 渲染输入区域
     render_input_area()
