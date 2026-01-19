@@ -1,4 +1,3 @@
-# 输入区域模块 - 处理聊天输入和用户输入处理
 import streamlit as st
 import re
 from datetime import datetime
@@ -8,6 +7,8 @@ from .file_utils import format_file_attachments
 from .styles import apply_global_styles
 from .chat_utils import clean_ai_text, render_badges
 from st_copy import copy_button
+# --- 新增引用 ---
+from .navigation import render_right_sidebar_nav 
 
 
 # 渲染输入区域
@@ -37,29 +38,35 @@ def render_input_area():
         # 显示成功动画
         from .styles import show_success_animation
         show_success_animation()
+
 # 处理用户输入
 def handle_user_input(prompt, uploaded_files):
     """
     处理用户输入
-    
-    Args:
-        prompt (str): 用户输入的文本
-        uploaded_files (list): 上传的文件列表
     """
     apply_global_styles()
-    
+
     if not st.session_state.bot:
         st.error("请先连接会话！")
         return
 
     # 获取当前模型名称
     current_model = st.session_state.get("current_session_model", "Unknown")
-    # 临时本地时间（在API返回前显示）
     temp_time = datetime.now().strftime("%H:%M:%S")
+
+    # --- 1. 计算新的 QA 索引 (用于锚点和导航) ---
+    # 统计历史消息中 user 的数量
+    existing_user_msgs = [m for m in st.session_state.messages if m["role"] == "user"]
+    current_pair_index = len(existing_user_msgs) # 如果已有0个，当前就是第0个；已有5个，当前就是第5个
 
     # --- 用户消息处理 ---
     file_names = [f.name for f in uploaded_files] if uploaded_files else []
     file_name_record = file_names[0] if file_names else None
+
+    # 【关键修改 1】在此处手动注入锚点，否则导航栏点击后不知道跳到哪里
+    st.markdown(f"""
+    <div id='msg-anchor-{current_pair_index}' style='position:relative; top: -80px; visibility: hidden;'></div>
+    """, unsafe_allow_html=True)
 
     with st.chat_message("user"):
         # 文件显示逻辑
@@ -67,25 +74,27 @@ def handle_user_input(prompt, uploaded_files):
         if file_html:
             st.markdown(file_html, unsafe_allow_html=True)
             st.markdown("\n\n")
-        
+
         st.text(prompt)
-        
-        # 操作按钮和信息标签 - 将操作按钮放在一个横向栏目中
+
         buttons_col, badges_col = st.columns([0.1, 0.9], vertical_alignment="center")
-        
         with buttons_col:
             copy_button(prompt)
-        
         with badges_col:
-            # 1. 创建用户徽章的占位符
             user_badges_placeholder = st.empty()
-            # 2. 初始渲染（使用本地时间，Tokens=0）
             user_badges_placeholder.html(render_badges(tokens=0, time_str=temp_time, model_name=current_model))
+
+    # 【关键修改 2】强制更新右侧导航栏
+    # 在用户发完消息、AI 回复之前，立即更新导航栏为 (历史数量 + 1)
+    # 这样用户就能立刻看到新的节点出现
+    render_right_sidebar_nav(current_pair_index + 1)
 
     # --- AI 消息处理 (流式) ---
     with st.chat_message("assistant"):
+        # ... 以下代码保持原样 ...
         response_placeholder = st.empty()
         full_response = ""
+
         
         # 3. 创建 AI 徽章的占位符
         ai_badges_placeholder = st.empty()
