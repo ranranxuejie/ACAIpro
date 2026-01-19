@@ -23,46 +23,65 @@ def render_navigation_bar():
             role = msg.get("role", "unknown")
             role_icon = "👤" if role == "user" else "🤖"
             
-            # 创建一个简单的按钮，使用streamlit的内置功能
-            if st.button(f"{role_icon} 消息 {idx + 1}", key=f"nav_{idx}", use_container_width=True):
-                # 使用streamlit的会话状态来存储要滚动到的消息索引
-                st.session_state["scroll_to_message"] = idx
-                
-                # 使用st.rerun()来重新渲染页面，触发滚动
-                st.rerun()
+            # 直接使用HTML按钮，避免streamlit按钮的延迟问题
+            button_html = f"""
+            <button 
+                onclick="scrollToMessage({idx})" 
+                style="
+                    width: 100%;
+                    padding: 10px;
+                    margin-bottom: 8px;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 8px;
+                    background-color: white;
+                    cursor: pointer;
+                    font-size: 14px;
+                    font-weight: 500;
+                    transition: all 0.2s ease;
+                "
+                onmouseover="this.style.backgroundColor='#f0f0f0'"
+                onmouseout="this.style.backgroundColor='white'"
+            >
+                {role_icon} 消息 {idx + 1}
+            </button>
+            """
+            
+            st.markdown(button_html, unsafe_allow_html=True)
     
-    # 检查是否需要滚动到特定消息
-    if "scroll_to_message" in st.session_state:
-        scroll_index = st.session_state["scroll_to_message"]
+    # 输出全局滚动函数，确保在页面加载时可用
+    st.markdown("""
+    <script>
+    // 全局滚动函数
+    function scrollToMessage(index) {
+        console.log('点击了导航按钮，索引:', index);
         
-        # 修复f-string语法错误，转义JavaScript的花括号
-        scroll_script = f"""
-        <script>
-        document.addEventListener('DOMContentLoaded', function() {{
-            console.log('滚动到消息索引:', {scroll_index});
+        // 立即执行滚动，不等待
+        setTimeout(function() {
+            console.log('执行滚动，索引:', index);
             
             // 获取所有聊天消息元素
             const chatMessages = document.querySelectorAll('[data-testid="stChatMessage"]');
             console.log('找到的消息数量:', chatMessages.length);
             
-            if (chatMessages.length > {scroll_index}) {{
-                const targetMessage = chatMessages[{scroll_index}];
+            if (chatMessages.length > index) {
+                const targetMessage = chatMessages[index];
                 console.log('目标消息:', targetMessage);
                 
-                // 滚动到目标消息
-                targetMessage.scrollIntoView({{
-                    behavior: 'smooth',
-                    block: 'center'
-                }});
+                // 使用最基本的滚动方法
+                targetMessage.scrollIntoView(true);
                 
-                // 高亮显示目标消息
-                targetMessage.style.boxShadow = '0 0 20px rgba(66, 133, 244, 0.5)';
-                setTimeout(() => {{
-                    targetMessage.style.boxShadow = 'none';
-                }}, 2000);
-            }}
-        }});
-        </script>
-        """
-        
-        st.markdown(scroll_script, unsafe_allow_html=True)
+                // 高亮显示
+                targetMessage.style.backgroundColor = '#f0f8ff';
+                targetMessage.style.border = '2px solid #4a90e2';
+                targetMessage.style.borderRadius = '8px';
+                
+                setTimeout(function() {
+                    targetMessage.style.backgroundColor = '';
+                    targetMessage.style.border = '';
+                    targetMessage.style.borderRadius = '';
+                }, 2000);
+            }
+        }, 100);
+    }
+    </script>
+    """, unsafe_allow_html=True)
