@@ -147,32 +147,54 @@ class AIClient:
 
     def update_session(self, session_id, update_data, session_data):
         """
-        更新会话信息（名称或模型）
-        
+        更新会话信息（名称、置顶状态等）
+
         Args:
             session_id (str): 会话ID
-            update_data (dict): 要更新的数据
-            session_data (dict): 当前会话数据
-            
+            update_data (dict): 要更新的数据（如 {"name": "新名称"}）
+            session_data (dict): 当前会话的完整原始数据
+
         Returns:
             tuple: (成功状态, 消息)
         """
         url = f"{self.base_url}/chat/session/{session_id}"
         try:
-            # 创建更新的会话数据，保留原有数据，更新指定字段
-            updated_data = session_data.copy()
-            updated_data.update(update_data)
-            
-            response = requests.put(url, headers=self.headers, json=updated_data)
+            # 1. 以当前会话数据为基础，保留 id, created, model, uid 等字段
+            payload = session_data.copy()
+
+            # 2. 根据需求：生成参数以 CONFIG 全局配置为准
+            # 强制同步以下字段，防止前端使用了旧的配置
+            config_sync_keys = [
+                "contextCount", 
+                "frequencyPenalty", 
+                "maxToken", 
+                "presencePenalty", 
+                "prompt", 
+                "temperature"
+            ]
+
+            for key in config_sync_keys:
+                if key in CONFIG:
+                    payload[key] = CONFIG[key]
+
+            # 3. 应用本次明确的更新 (例如 name, topSort)
+            # 这会覆盖掉上面的 Config 值（如果 update_data 里也有的话），也会覆盖掉旧的 session_data
+            payload.update(update_data)
+
+            # 发送 PUT 请求
+            response = requests.put(url, headers=self.headers, json=payload)
+
             if response.status_code == 200:
                 res_json = response.json()
                 if res_json.get("code") == 0:
                     return True, "会话信息更新成功"
                 else:
-                    return False, res_json.get('msg')
+                    return False, res_json.get('msg', '更新失败')
             return False, f"HTTP {response.status_code}"
+
         except Exception as e:
             return False, str(e)
+
     def toggle_session_pin(self, session_data):
         """
         [新增] 切换会话置顶状态

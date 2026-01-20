@@ -1,21 +1,15 @@
 # 侧边栏模块 - 处理侧边栏组件
 import streamlit as st
-from streamlit_extras.grid import grid
-from streamlit_extras.colored_header import colored_header
+import streamlit.components.v1 as components
 from .core import AIClient
 from .config import CONFIG
 from datetime import datetime
 
-# --- 辅助逻辑函数 ---
+
+# --- 1. 辅助逻辑函数 ---
 
 def get_session_group(timestamp_str, is_pinned=False):
-    """
-    解析时间并返回分组名称
-    如果 is_pinned 为 True，强制返回 '已置顶'
-    """
-    if is_pinned:
-        return "📌 已置顶"
-
+    if is_pinned: return "📌 已置顶"
     if not timestamp_str: return "未知时间"
     try:
         if isinstance(timestamp_str, int):
@@ -26,7 +20,6 @@ def get_session_group(timestamp_str, is_pinned=False):
 
         now = datetime.now()
         diff_days = (now.date() - dt.date()).days
-
         if diff_days == 0: return "今天"
         if diff_days == 1: return "昨天"
         if diff_days <= 7: return "过去 7 天"
@@ -34,79 +27,42 @@ def get_session_group(timestamp_str, is_pinned=False):
         return "更早"
     except:
         return "未知时间"
-
 def load_session_to_state(session_id, session_name, session_model, user_token):
-    """【封装】加载会话数据到全局状态"""
+    """加载会话数据到全局状态"""
     if not st.session_state.bot:
         st.session_state.bot = AIClient(user_token)
 
+    # --- 修复点：同时更新 token 属性和 headers 字典 ---
     st.session_state.bot.token = user_token
+    st.session_state.bot.headers["Authorization"] = user_token 
+    # -----------------------------------------------
+
     st.session_state.bot.session_id = session_id
 
-    # 会话模型信息
-    current_model = session_model or "gemini-3-pro-preview"
-    st.session_state.selected_model = current_model
-    st.session_state.current_session_model = current_model
-    st.session_state.status = f"✅ 已连接: {session_name}"
+    # 确保模型状态同步
+    curr_model = session_model or "gemini-3-pro-preview"
+    st.session_state.selected_model = curr_model
+    st.session_state.current_session_model = curr_model
+
     st.session_state.messages = [] 
     st.session_state.useFiles = [] 
 
     success, data = st.session_state.bot.get_chat_records(session_id)
     if success and data.get("records"):
-        # 为每条消息设置统一的模型信息
         for record in reversed(data["records"]):
             use_files = record.get("useFiles", []) or []
-            
-            # 从API返回的数据中获取时间，处理不同的字段名
-            created_time = record.get("created", "") or record.get("updated", "") or ""
-            
-            # 格式化时间显示
-            formatted_time = created_time
-            if formatted_time and len(formatted_time) > 19:
-                # 只保留到秒，去除毫秒部分
-                formatted_time = formatted_time[:19]
-            
-            # 从record中提取删除所需的参数
-            record_id = record.get("id") or record.get("recordId") or record.get("record_id")
-            session_id_from_record = record.get("sessionId") or record.get("session_id") or session_id
-            task_id = record.get("taskId") or record.get("task_id")
-            
             if record.get("userText"):
-                # 人的回答，使用useTokens
-                user_tokens = record.get("useTokens", 0) or 0
                 st.session_state.messages.append({
                     "role": "user", 
                     "content": record.get("userText"),
-                    "updated": formatted_time,  # 使用格式化后的时间
-                    "model": current_model,  # 会话级别的模型信息
-                    "useTokens": user_tokens,  # 人的回答使用useTokens
-                    "tokens": user_tokens,  # 保持兼容性
                     "files": use_files, 
-                    "file_name": record.get("fileName", ""),
-                    "cid": record_id,  # 保存删除所需的参数
-                    "sid": session_id_from_record,
-                    "taskId": task_id
+                    "file_name": record.get("fileName", "")
                 })
             if record.get("aiText"):
-                # AI回答，使用completionTokens
-                ai_tokens = record.get("completionTokens", 0) or 0
-                
-                # 获取AI消息的时间
-                ai_time = record.get("updated", "") or created_time
-                if ai_time and len(ai_time) > 19:
-                    ai_time = ai_time[:19]
-                
                 st.session_state.messages.append({
                     "role": "assistant", 
                     "content": record.get("aiText"),
-                    "tokens": ai_tokens,  # AI回答使用completionTokens
-                    "useTokens": ai_tokens,  # 保持与handle_user_input一致
-                    "updated": ai_time,  # 使用AI消息的时间
-                    "model": current_model,  # 会话级别的模型信息
-                    "record_model": record.get("model", ""),  # 记录级别的模型信息（备用）
-                    "cid": record_id,  # 保存删除所需的参数
-                    "sid": session_id_from_record,
-                    "taskId": task_id
+                    "tokens": record.get("completionTokens", 0)
                 })
             for file in use_files:
                 if not any(f.get("name") == file.get("name") for f in st.session_state.useFiles):
@@ -114,318 +70,299 @@ def load_session_to_state(session_id, session_name, session_model, user_token):
         st.toast(f"已加载: {session_name}", icon="✅")
     else:
         st.toast(f"已切换 (无记录)", icon="✅")
+    st.rerun()
 
-# --- 子组件渲染函数 ---
+# --- 2. 核心：使用 V1 组件注入高级样式 ---
 
-def inject_custom_css():
-    """注入侧边栏专用的 CSS"""
-    st.markdown("""
-    <style>
-    /* 全局紧凑调整 */
-    div[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div { margin-bottom: 0.5rem; }
-    div[data-testid="stTextInput"] { margin-bottom: 5px !important; }
-    div[data-testid="stTextInput"] input { padding: 8px 10px; font-size: 13px; border-radius: 8px; }
+def inject_sidebar_styles_via_js():
+    """
+    CSS 修复版：实现【整行高亮】效果。
+    策略：
+    1. 识别包含 'primary' 按钮的行容器 (stHorizontalBlock)。
+    2. 将红色背景和左边框应用在‘行容器’上，而不是按钮上。
+    3. 将行内的按钮背景设为透明，以便透出行容器的颜色。
+    """
+    js = """
+    <script>
+    (function() {
+        var parentDoc = window.parent.document;
+        var oldStyle = parentDoc.getElementById('ac-pro-sidebar-style');
+        if (oldStyle) oldStyle.remove();
 
-    /* =================================================================================
-       【关键修改】响应式网格布局逻辑
-       ================================================================================= */
+        var style = parentDoc.createElement('style');
+        style.id = 'ac-pro-sidebar-style';
+        style.innerHTML = `
+            /* 1. 布局重置 */
+            [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { 
+                gap: 0rem !important; 
+            }
 
-    /* 1. 将 Expand Details 内部的容器转为 CSS Grid - 只影响侧边栏 */
-    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] {
-        display: grid !important;
-        /* 核心：自动填充，最小宽度 135px。侧边栏拉宽时会自动一行排两个，窄时排一个 */
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
-        gap: 8px !important;
-        padding-right: 2px;
-    }
+            /* =================================================================================
+               2. 行容器样式 (stHorizontalBlock)
+               ================================================================================= */
 
-    /* 2. 让直接子元素填满网格单元 - 只影响侧边栏 */
-    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] > div {
-        width: 100% !important;
-    }
+            /* 默认状态：透明，带过渡动画 */
+            [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
+                min-height: 36px !important;
+                margin-bottom: 2px !important;
+                border-radius: 6px;
+                padding: 0 !important;
+                background-color: transparent !important;
+                border: 1px solid transparent !important; /* 预留边框位置 */
+                border-left: 3px solid transparent !important; /* 左侧指示条预留 */
+                transition: background-color 0.15s ease, border-color 0.15s ease;
+                align-items: center !important;
+            }
 
-    /* 3. 【特殊处理】让包含"标题"和"分割线"的元素跨越整行（不被分栏） - 只影响侧边栏 */
-    /* 使用 :has() 选择器检查是否包含特定类名或 HR 标签 */
-    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] > div:has(.session-group-header),
-    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] > div[data-testid="stVerticalBlock"] > div:has(hr) {
-        grid-column: 1 / -1 !important; /* 强制跨越所有列 */
-        margin-top: 5px !important;
-    }
+            /* 悬停状态：显示极淡的背景 */
+            [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:hover {
+                background-color: rgba(128, 128, 128, 0.08) !important;
+            }
 
-    /* 4. 卡片化样式：为每个会话项增加背景和边框，使其像一个小磁贴 - 只影响侧边栏 */
-    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] {
-        background-color: rgba(128, 128, 128, 0.04);
-        border: 1px solid rgba(128, 128, 128, 0.08);
-        border-radius: 6px;
-        padding: 4px;
-        align-items: center;
-        transition: all 0.2s ease;
-        height: 100% !important; /* 确保高度一致 */
-    }
+            /* 【核心】选中状态：整行高亮 */
+            /* 逻辑：如果这个行容器的第一列里有一个 primary 按钮，那么这个行就是被选中的 */
+            [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has([data-testid="column"]:first-child button[kind="primary"]) {
+                background-color: rgba(255, 75, 75, 0.1) !important; /* 红色背景 */
+                border-left: 3px solid #FF4B4B !important; /* 左侧红条 */
+            }
 
-    /* 悬停卡片效果 - 只影响侧边栏 */
-    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"]:hover {
-        background-color: rgba(128, 128, 128, 0.08);
-        border-color: rgba(128, 128, 128, 0.2);
-        transform: translateY(-1px);
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-    }
+            /* =================================================================================
+               3. 按钮样式 (作用于行内)
+               ================================================================================= */
 
-    /* ================================================================================= */
+            /* 强制将行内的所有按钮背景设为透明，否则会挡住行的红色背景 */
+            [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] button {
+                background: transparent !important;
+                background-color: transparent !important;
+                border: none !important;
+                box-shadow: none !important;
+                width: 100% !important;
+                text-align: left !important;
+                height: 100% !important;
+                min-height: 36px !important;
+                padding: 0 8px !important;
+                margin: 0 !important;
+            }
 
-    /* --- 1. 左侧会话按钮 (75%) --- */
-    div[data-testid="stExpanderDetails"] div[data-testid="column"]:first-child button {
-        text-align: left !important; 
-        padding: 4px 6px !important; /* 稍微减小内边距以适应小卡片 */
-        margin: 0 !important; 
-        width: 100% !important; 
-        display: block !important; 
-        white-space: nowrap !important; 
-        overflow: hidden !important; 
-        text-overflow: ellipsis !important;
-        font-size: 13px !important; 
-        line-height: 1.5 !important; 
-        min-height: 28px !important;
-        transition: background-color 0.2s ease !important;
-    }
+            /* 选中按钮的文字颜色 (Primary) */
+            [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="column"]:first-child button[kind="primary"] {
+                color: #FF4B4B !important;
+                font-weight: 600 !important;
+            }
 
-    /* 未选中状态 (secondary) - 透明 */
-    div[data-testid="stExpanderDetails"] div[data-testid="column"]:first-child button[kind="secondary"] {
-        background-color: transparent !important; 
-        border: none !important;
-        box-shadow: none !important;
-        color: inherit !important;
-    }
+            /* 未选中按钮的文字颜色 (Secondary) */
+            [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="column"]:first-child button[kind="secondary"] {
+                color: rgba(140, 140, 140, 0.9) !important;
+                font-weight: 400 !important;
+            }
+            /* 深色模式适配 */
+            @media (prefers-color-scheme: dark) {
+                [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="column"]:first-child button[kind="secondary"] {
+                    color: rgba(200, 200, 200, 0.8) !important;
+                }
+            }
 
-    /* 选中状态 (primary) - 明显的左边框和背景 */
-    div[data-testid="stExpanderDetails"] div[data-testid="column"]:first-child button[kind="primary"] {
-        background-color: rgba(128, 128, 128, 0.15) !important; 
-        font-weight: 600 !important;
-        border: none !important;
-        border-left: 3px solid #FF4B4B !important; 
-        border-radius: 2px 4px 4px 2px !important;
-    }
+            /* =================================================================================
+               4. 右侧菜单按钮 (...)
+               ================================================================================= */
+            [data-testid="stSidebar"] [data-testid="column"]:last-child button {
+                color: transparent !important;
+                justify-content: center !important;
+                width: 32px !important;
+            }
 
-    /* --- 2. 右侧菜单按钮 (25%) --- */
-    div[data-testid="stExpanderDetails"] div[data-testid="column"]:last-child button {
-        background-color: transparent !important; 
-        border: none !important; 
-        box-shadow: none !important;
-        padding: 0 !important; 
-        margin: 0 !important; 
-        width: 100% !important; 
-        height: 28px !important;
-        display: flex !important; 
-        align-items: center !important; 
-        justify-content: center !important;
-        opacity: 0; 
-        transition: opacity 0.2s !important;
-    }
+            [data-testid="stSidebar"] [data-testid="column"]:last-child button::after {
+                content: "•••";
+                color: #999;
+                font-size: 12px;
+                opacity: 0;
+                transition: opacity 0.2s;
+            }
 
-    /* 卡片悬停时，显示右侧按钮 - 只影响侧边栏 */
-    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"]:hover div[data-testid="column"]:last-child button { 
-        opacity: 0.5; 
-    }
+            /* 只要行被悬停，就显示菜单按钮 */
+            [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:hover [data-testid="column"]:last-child button::after {
+                opacity: 1;
+            }
 
-    /* 按钮自身悬停时高亮 - 只影响侧边栏 */
-    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:last-child button:hover {
-        opacity: 1 !important; 
-        background-color: rgba(128, 128, 128, 0.15) !important;
-        border-radius: 4px !important;
-        position: relative;
-    }
+            [data-testid="stSidebar"] [data-testid="column"]:last-child button:hover::after {
+                color: #FF4B4B; /* 悬停变红 */
+            }
 
-    /* Hover 显示三点图标 - 只影响侧边栏 */
-    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] div[data-testid="stHorizontalBlock"] div[data-testid="column"]:last-child button:hover::after {
-        content: "⋮";
-        position: absolute;
-        color: #666;
-        font-weight: bold;
-    }
+            [data-testid="stSidebar"] [data-testid="column"]:last-child button svg { display: none !important; }
 
-    div[data-testid="stSidebar"] div[data-testid="stExpanderDetails"] div[data-testid="column"]:last-child button svg { display: none !important; }
+            /* =================================================================================
+               5. 标题样式
+               ================================================================================= */
+            .session-header {
+                font-size: 11px;
+                font-weight: 700;
+                color: #888;
+                text-transform: uppercase;
+                margin-top: 5px !important;
+                margin-bottom: 5px !important;
+                padding-left: 4px;
+                letter-spacing: 0.5px;
+            }
 
-    /* 分组标题 */
-    .session-group-header {
-        font-size: 12px; color: #888; font-weight: 600;
-        padding-top: 10px !important; padding-bottom: 2px !important;
-        display: flex !important; align-items: flex-end !important; margin: 0 !important;
-    }
-    hr { margin-top: 0.2rem !important; margin-bottom: 0.5rem !important; border-color: rgba(128, 128, 128, 0.2) !important; }
+            /* 压缩容器内边距 */
+            [data-testid="stSidebar"] [data-testid="column"] { padding: 0 !important; min-width: 0 !important; }
+        `;
+        parentDoc.head.appendChild(style);
+    })();
+    </script>
+    """
+    components.html(js, height=0, width=0)
 
-    div[data-testid="stPopoverBody"] { padding: 10px !important; }
-    div[data-testid="stPopoverBody"] button { margin-bottom: 5px !important; }
-    </style>
-    """, unsafe_allow_html=True)
-
+# --- 3. 组件渲染函数 ---
 def render_model_selector(user_token):
-    """渲染模型选择和新建会话区域"""
-    if not (st.session_state.models and st.session_state.bot):
-        return
+    """
+    渲染模型选择器，保持双重逻辑
+    """
+    
+    if not (st.session_state.models and st.session_state.bot): return
 
-    model_values = [m.get("value") for m in st.session_state.models if m.get("value")]
-    current_model = st.session_state.current_session_model
+    active_session_id = st.session_state.bot.session_id
+    current_session_model = st.session_state.get("current_session_model")
 
-    current_session_data = next((s for s in st.session_state.sessions if s.get("id") == st.session_state.bot.session_id), None)
-    if current_session_data:
-        current_model = current_session_data.get("model", current_model)
-        st.session_state.selected_model = current_model
+    # 逻辑：正在聊天 ? 显示当前聊天模型 : 显示全局默认模型
+    display_model = current_session_model if active_session_id else st.session_state.get("selected_model")
 
-    fixed_cats = ["GPT", "GEMINI", "CLAUDE", "DEEPSEEK", "SORA", "GLM", "QWEN3", "DOUBAO", "其他"]
-    model_cats = {c: [] for c in fixed_cats}
-    for m in model_values:
-        found = False
-        for c in fixed_cats[:-1]:
-            if c.lower() in m.lower():
-                model_cats[c].append(m)
-                found = True
-                break
-        if not found: model_cats["其他"].append(m)
-
-    if "selected_category" not in st.session_state:
-        st.session_state.selected_category = "其他"
-        for c, ms in model_cats.items():
-            if current_model in ms:
-                st.session_state.selected_category = c
-                break
+    if not display_model and st.session_state.models:
+        display_model = st.session_state.models[0]["value"]
 
     with st.container():
-        cat_idx = fixed_cats.index(st.session_state.selected_category) if st.session_state.selected_category in fixed_cats else 0
-        sel_cat = st.selectbox("模型分类", fixed_cats, index=cat_idx, key="cat_sel", label_visibility="collapsed")
-        st.session_state.selected_category = sel_cat
-
-        cat_models = model_cats[sel_cat]
-        mod_idx = cat_models.index(current_model) if current_model in cat_models else 0
-        sel_model = st.selectbox("具体模型", cat_models, index=mod_idx, key="mod_sel", label_visibility="collapsed")
-
-        if st.button("🆕 新建会话", use_container_width=True, type="primary"):
-            if not user_token:
-                st.error("需 Token")
+        
+        # 注意：这里的“新建对话”按钮在 stHorizontalBlock 之外
+        if st.button("✨ 新建对话", use_container_width=True, type="primary"):
+            if not user_token: 
+                st.error("缺 Token")
             else:
                 bot = AIClient(user_token)
-                ok, msg = bot.create_session(model=st.session_state.selected_model)
-                if ok:
-                    load_session_to_state(msg, "新会话", st.session_state.selected_model, user_token)
-                    ok_s, data_s = bot.get_sessions()
-                    if ok_s: st.session_state.sessions = data_s
-                    st.rerun()
-                else:
-                    st.toast(f"创建失败: {msg}", icon="❌")
+                ok, msg = bot.create_session(model=selected_val)
+                if ok: 
+                    # --- 修复点：新建成功后，立即同步一次会话列表 ---
+                    # 这样 rerun 后，侧边栏列表中就包含了这个新会话，状态才是一致的
+                    success_list, sessions_data = bot.get_sessions()
+                    if success_list:
+                        st.session_state.sessions = sessions_data
+                    # ---------------------------------------------
 
-    if sel_model != current_model and current_session_data:
-        bot = AIClient(user_token)
-        if bot.update_session(current_session_data["id"], {"model": sel_model}, current_session_data)[0]:
-            for s in st.session_state.sessions:
-                if s["id"] == current_session_data["id"]: s["model"] = sel_model
-            st.session_state.selected_model = sel_model
-            st.session_state.current_session_model = sel_model
-            st.toast(f"已切换: {sel_model}", icon="✅")
+                    load_session_to_state(msg, "New Chat", selected_val, user_token)
+                else: 
+                    st.toast(msg, icon="❌")
+
+        all_models = [m["value"] for m in st.session_state.models]
+        if display_model not in all_models: all_models.insert(0, display_model)
+        st.html('<div style="height: 15px;"></div>')
+        selected_val = st.selectbox(
+            "选择模型", 
+            all_models, 
+            index=all_models.index(display_model) if display_model in all_models else 0,
+            label_visibility="collapsed",
+            key="sidebar_model_select"
+        )
+
+        if selected_val != display_model:
+            st.session_state.selected_model = selected_val
+            if active_session_id:
+                curr_s = next((s for s in st.session_state.sessions if s["id"] == active_session_id), None)
+                if curr_s:
+                    bot = AIClient(user_token)
+                    ok, _ = bot.update_session(active_session_id, {"model": selected_val}, curr_s)
+                    if ok:
+                        curr_s["model"] = selected_val
+                        st.session_state.current_session_model = selected_val
+                        st.toast(f"已切换模型至 {selected_val}", icon="🔄")
+                        st.rerun()
+            else:
+                st.rerun()
 
 def render_session_list(user_token):
-    """渲染历史会话列表"""
-    st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
+    st.html('<div style="height: 15px;"></div>')
+    st.text_input("", placeholder="🔍 搜索...", key="search_query", label_visibility="collapsed")
+    query = st.session_state.get("search_query", "").lower()
+    st.html('<div style="height: 15px;"></div>')
+    if not st.session_state.sessions:
+        st.info("暂无历史", icon="📭")
+        return
 
-    # --- 会话改名区域 ---
-    curr_s = next((s for s in st.session_state.sessions if st.session_state.bot and s["id"] == st.session_state.bot.session_id), None)
-    if curr_s:
-        c1, c2 = st.columns([3, 1])
-        new_name = c1.text_input("改名", value=curr_s.get("name", "未命名"), key="name_edit", label_visibility="collapsed")
-        if c2.button("💾", key="save_name", use_container_width=True):
-            if new_name != curr_s.get("name"):
-                if st.session_state.bot.update_session(curr_s["id"], {"name": new_name}, curr_s)[0]:
-                    curr_s["name"] = new_name
-                    st.toast("已改名", icon="✅")
-                    st.rerun()
+    sessions = st.session_state.sessions
+    if query: sessions = [s for s in sessions if query in (s.get("name") or "").lower()]
+    sessions.sort(key=lambda x: (x.get('topSort', 0), x.get('updated', '')), reverse=True)
 
-    # --- 历史列表 ---
-    with st.expander("📜 历史会话", expanded=True):
-        if not st.session_state.sessions:
-            st.info("暂无历史会话")
-            return
+    groups = {}
+    group_order = ["📌 已置顶", "今天", "昨天", "过去 7 天", "更早", "未知时间"]
+    for s in sessions:
+        g = get_session_group(s.get('updated'), is_pinned=s.get('topSort')==1)
+        groups.setdefault(g, []).append(s)
 
-        query = st.text_input("搜历史", placeholder="搜索...", label_visibility="collapsed")
+    first_group = True
+    for g_name in group_order:
+        if g_name in groups:
+            # 物理空行
+            st.html('<div style="height: 5px;"></div>')
 
-        # 1. 过滤
-        sessions = [s for s in st.session_state.sessions if not query or query.lower() in (s.get("name") or "").lower()]
+            # 显示标题
+            if not query:
+                st.markdown(f'<div class="session-header">{g_name}</div>', unsafe_allow_html=True)
 
-        # 2. 排序
-        sessions.sort(key=lambda x: (x.get('topSort', 0), x.get('updated', '')), reverse=True)
+            # 再加一点小间距
+            st.html('<div style="height: 15px;"></div>')
 
-        if not sessions:
-            st.caption("无匹配会话")
-            return
 
-        # 3. 分组
-        groups = {}
-        group_order = ["📌 已置顶", "今天", "昨天", "过去 7 天", "过去 30 天", "更早", "未知时间"]
+            first_group = False
 
-        for s in sessions:
-            is_pinned = s.get('topSort') == 1
-            g = get_session_group(s.get('updated'), is_pinned=is_pinned)
-            groups.setdefault(g, []).append(s)
+            for s in groups[g_name]:
+                s_id = s["id"]
+                s_name = s.get("name", "未命名")
 
-        # 4. 渲染
-        for g_name in group_order:
-            if g_name in groups:
-                if not query:
-                    # 使用colored_header增强标题视觉效果
-                    colored_header(
-                        label=g_name,
-                        description="",
-                        color_name="blue-70"
-                    )
-                    st.markdown("---")
+                is_active = (st.session_state.bot and str(s_id) == str(st.session_state.bot.session_id))
+                is_pinned = s.get("topSort") == 1
 
-                # 使用传统的columns布局，确保会话列表有足够宽度
-                # 为每个会话创建一个容器
-                for s in groups[g_name]:
-                    s_id = s.get("id")
-                    s_name = s.get("name", "未命名")
-                    is_active = (st.session_state.bot and str(s_id) == str(st.session_state.bot.session_id))
-                    is_pinned = s.get("topSort") == 1
+                # 这种 columns 结构会被 CSS 捕获为 stHorizontalBlock
+                c1, c2 = st.columns([0.85, 0.15])
 
-                    # 使用单个列容器，确保会话项有足够宽度
-                    with st.container():
-                        # 比例 0.85 : 0.15，增加会话名称显示空间
-                        c1, c2 = st.columns([0.85, 0.15], gap="small")
+                with c1:
+                    # is_active 决定了 primary/secondary
+                    # CSS 监控这一行：如果有 primary 按钮，整行变红
+                    if st.button(s_name, key=f"sess_{s_id}", type="primary" if is_active else "secondary"):
+                        load_session_to_state(s_id, s_name, s.get("model"), user_token)
 
-                        # A. 切换按钮 - 增加按钮宽度，提高可用性
-                        if c1.button(s_name, key=f"s_{s_id}", type="primary" if is_active else "secondary", use_container_width=True, help=f"模型: {s.get('model')}"):
-                            if user_token:
-                                load_session_to_state(s_id, s_name, s.get("model"), user_token)
+                with c2:
+                    with st.popover(" ", use_container_width=True):
+                        st.markdown(f"**{s_name}**")
+
+                        pin_label = "🚫 取消置顶" if is_pinned else "📌 置顶"
+                        if st.button(pin_label, key=f"pin_{s_id}", use_container_width=True):
+                            bot = AIClient(user_token)
+                            if bot.toggle_session_pin(s)[0]:
+                                st.session_state.sessions = bot.get_sessions()[1]
                                 st.rerun()
 
-                        # B. 操作菜单 (空格占位)
-                        with c2.popover(" ", use_container_width=True):
-                            # 1. 置顶/取消置顶按钮
-                            pin_text = "🚫 取消置顶" if is_pinned else "📌 置顶会话"
-                            if st.button(pin_text, key=f"pin_{s_id}", use_container_width=True):
-                                if user_token:
-                                    bot = AIClient(user_token)
-                                    ok, msg = bot.toggle_session_pin(s)
-                                    if ok:
-                                        ok_s, data_s = bot.get_sessions()
-                                        if ok_s: st.session_state.sessions = data_s
-                                        st.toast("置顶状态已更新", icon="📌")
-                                        st.rerun()
+                        new_name = st.text_input("重命名", value=s_name, key=f"ren_{s_id}")
+                        if new_name != s_name and st.button("确认修改", key=f"ren_btn_{s_id}"):
+                             bot = AIClient(user_token)
+                             bot.update_session(s_id, {"name": new_name}, s)
+                             s["name"] = new_name 
+                             st.rerun()
 
-                            # 2. 删除按钮
-                            if st.button("🔴 删除会话", key=f"d_{s_id}", use_container_width=True):
-                                bot = AIClient(user_token)
-                                if bot.delete_session(s_id)[0]:
-                                    st.session_state.sessions = bot.get_sessions()[1]
-                                    if is_active:
-                                        st.session_state.bot = None
-                                        st.session_state.messages = []
-                                    st.toast("已删除", icon="✅")
-                                    st.rerun()
+                        st.divider()
+                        if st.button("🗑️ 删除", key=f"del_{s_id}", type="primary", use_container_width=True):
+                            bot = AIClient(user_token)
+                            if bot.delete_session(s_id)[0]:
+                                st.session_state.sessions = bot.get_sessions()[1]
+                                if is_active: 
+                                    st.session_state.bot = None
+                                    st.session_state.messages = []
+                                st.rerun()
 
-def render_config_area(user_token):
-    """渲染配置区域"""
-    with st.expander("⚙️ 配置", expanded=False):
+def render_config_area():
+    with st.expander("⚙️ 设置", expanded=False):
         saved = st.session_state.get("saved_api_token", CONFIG["token"])
         new_token = st.text_input("API Token", value=saved, type="password", key="token_in")
-        if st.checkbox("记住 Token", value=st.session_state.get("remember_token", False)):
+
+        col_c1, col_c2 = st.columns([0.6, 0.4])
+        if col_c1.checkbox("记住 Token", value=st.session_state.get("remember_token", False)):
             if st.session_state.get("saved_api_token") != new_token:
                 st.session_state["saved_api_token"] = new_token
                 st.session_state["remember_token"] = True
@@ -436,27 +373,27 @@ def render_config_area(user_token):
                 st.session_state["remember_token"] = False
                 st.rerun()
 
+        st.divider()
         if "chat_params" not in st.session_state:
             st.session_state.chat_params = {k: CONFIG[k] for k in ["contextCount", "prompt", "temperature"]}
 
         p = st.session_state.chat_params
-        p["contextCount"] = st.slider("上下文", 1, 100, int(p["contextCount"]))
-        p["prompt"] = st.text_area("提示词", value=p["prompt"], height=100)
-        p["temperature"] = st.slider("温度", 0.0, 1.0, float(p["temperature"]), step=0.1)
+        p["contextCount"] = st.slider("Context (上下文)", 1, 100, int(p["contextCount"]))
+        p["temperature"] = st.slider("Temperature (温度)", 0.0, 1.0, float(p["temperature"]), step=0.1)
+        p["prompt"] = st.text_area("System Prompt", value=p["prompt"], height=80)
 
-        if st.button("保存参数", use_container_width=True):
+        if st.button("💾 保存参数", use_container_width=True):
             CONFIG.update(p)
-            st.toast("参数已保存", icon="✅")
+            st.toast("配置已保存", icon="✅")
 
-# --- 主渲染入口 ---
+# --- 4. 主入口 ---
 
 def render_sidebar():
-    """主函数：组合各部分"""
     with st.sidebar:
-        inject_custom_css()
-
+        inject_sidebar_styles_via_js()
         user_token = st.session_state.get("saved_api_token", CONFIG["token"])
-
         render_model_selector(user_token)
+        st.write("") 
         render_session_list(user_token)
-        render_config_area(user_token)
+        st.divider()
+        render_config_area()

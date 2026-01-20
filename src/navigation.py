@@ -1,115 +1,177 @@
 # 导航模块 - 处理消息导航和跳转功能
 import streamlit as st
+import streamlit.components.v1 as components
 
-# 渲染右侧侧边栏导航
 def render_right_sidebar_nav(qa_count):
     """
-    渲染右侧固定的导航栏，提供快速跳转到不同消息的功能
-    参考Gemini的设计风格
-    
+    渲染右侧固定的导航栏，提供快速跳转到不同消息的功能。
+    使用 JS 注入父级 DOM 的方式，确保点击事件 100% 触发。
+
     Args:
         qa_count (int): 对话组数量
     """
     if qa_count == 0:
         return
-    
-    # 输出CSS和HTML，实现右侧固定导航栏
-    html_content = """
-    <style>
-    /* 右侧导航栏容器 */
-    .right-sidebar-nav {
-        position: fixed !important;
-        right: 20px !important;
-        top: 50% !important;
-        transform: translateY(-50%) !important;
-        z-index: 9999 !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        gap: 8px !important;
-        background: rgba(255, 255, 255, 0.95) !important;
-        border-radius: 20px !important;
-        padding: 12px !important;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
-        backdrop-filter: blur(10px) !important;
-    }
-    
-    /* 导航点样式 */
-    .nav-dot {
-        width: 16px !important;
-        height: 16px !important;
-        border-radius: 50% !important;
-        background-color: #e0e0e0 !important;
-        cursor: pointer !important;
-        transition: all 0.3s ease !important;
-        position: relative !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        font-size: 12px !important;
-        font-weight: 600 !important;
-        color: #666 !important;
-    }
-    
-    /* 导航点悬停效果 */
-    .nav-dot:hover {
-        transform: scale(1.3) !important;
-        background-color: #ff4b4b !important;
-        color: white !important;
-        box-shadow: 0 0 10px rgba(255, 75, 75, 0.5) !important;
-    }
-    
-    /* 连接线样式 */
-    .nav-line {
-        width: 2px !important;
-        height: 20px !important;
-        background-color: #e0e0e0 !important;
-    }
-    </style>
-    
-    <!-- 右侧导航栏HTML -->
-    <div class="right-sidebar-nav">
-    """
-    
-    # 生成导航点和连接线
-    for i in range(qa_count):
-        # 导航点
-        html_content += f"""
-        <div class="nav-dot" onclick="scrollToMessage({i})" title="跳转到第 {i + 1} 组对话">
-            {i + 1}
-        </div>
-        """
-        
-        # 添加连接线（除了最后一个点）
-        if i < qa_count - 1:
-            html_content += "<div class='nav-line'></div>"
-    
-    # 关闭导航栏容器
-    html_content += "</div>"
-    
-    # 添加JavaScript
-    html_content += """
+
+    # 这里的 JS 逻辑是：
+    # 1. 找到父窗口 (Streamlit 主页面) 的 document
+    # 2. 清除旧的导航栏 (防止 Streamlit 重新运行时重复添加)
+    # 3. 创建新的导航栏 HTML 结构
+    # 4. 将其直接 append 到父窗口的 body 中
+    # 5. 绑定点击事件，调用父窗口的 scrollIntoView
+
+    js_code = f"""
     <script>
-    // 滚动到指定消息
-    function scrollToMessage(index) {
-        console.log('滚动到消息:', index);
-        
-        // 获取锚点元素
-        const anchor = document.getElementById('msg-anchor-' + index);
-        if (anchor) {
-            console.log('找到锚点:', anchor);
-            
-            // 平滑滚动到锚点
-            anchor.scrollIntoView({
-                behavior: 'smooth',
-                block: 'start'
-            });
-        } else {
-            console.error('未找到锚点:', 'msg-anchor-' + index);
-        }
-    }
+    (function() {{
+        // === 1. 获取父窗口对象 (核心) ===
+        // Streamlit 组件运行在 iframe 中，我们需要操作 parent
+        var parentDoc = window.parent.document;
+
+        // === 2. 清理旧元素 ===
+        // 每次 Streamlit 重新渲染时，先删除上一次生成的导航栏
+        var oldNav = parentDoc.getElementById('ac-pro-right-nav');
+        if (oldNav) {{
+            oldNav.remove();
+        }}
+
+        var oldStyle = parentDoc.getElementById('ac-pro-nav-style');
+        if (oldStyle) {{
+            oldStyle.remove();
+        }}
+
+        // === 3. 注入 CSS 样式 ===
+        var style = parentDoc.createElement('style');
+        style.id = 'ac-pro-nav-style';
+        style.innerHTML = `
+            /* 导航容器 */
+            #ac-pro-right-nav {{
+                position: fixed;
+                right: 20px;
+                top: 50%;
+                transform: translateY(-50%);
+                z-index: 999999; /* 确保在最上层 */
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 0px; /* 线条和点紧密连接 */
+                padding: 10px;
+            }}
+
+            /* 单个导航项容器 (点+线) */
+            .nav-item-container {{
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                cursor: pointer;
+                position: relative;
+            }}
+
+            /* 导航点 */
+            .nav-dot {{
+                width: 14px;
+                height: 14px;
+                border-radius: 50%;
+                background-color: #ddd; /* 默认灰色 */
+                border: 2px solid #bbb;
+                transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 0px; /* 隐藏数字，悬浮显示 */
+                z-index: 2;
+            }}
+
+            /* 悬停时的点 */
+            .nav-item-container:hover .nav-dot {{
+                transform: scale(1.6);
+                background-color: #FF4B4B; /* Streamlit 红 */
+                border-color: #FF4B4B;
+                box-shadow: 0 0 8px rgba(255, 75, 75, 0.6);
+            }}
+
+            /* 悬停时的提示气泡 (Tooltip) */
+            .nav-item-container::after {{
+                content: attr(data-tooltip);
+                position: absolute;
+                right: 30px; /* 在点的左边显示 */
+                top: 50%;
+                transform: translateY(-50%) translateX(10px);
+                background: rgba(0,0,0,0.7);
+                color: white;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                white-space: nowrap;
+                opacity: 0;
+                pointer-events: none;
+                transition: all 0.2s ease;
+            }}
+
+            .nav-item-container:hover::after {{
+                opacity: 1;
+                transform: translateY(-50%) translateX(0);
+            }}
+
+            /* 连接线 */
+            .nav-line {{
+                width: 2px;
+                height: 25px; /* 点之间的间距 */
+                background-color: #e0e0e0;
+                transition: background-color 0.3s;
+                z-index: 1;
+            }}
+
+            .nav-item-container:hover + .nav-item-container .nav-line {{
+                /* background-color: #ffcccc; 可选：连线变色 */
+            }}
+        `;
+        parentDoc.head.appendChild(style);
+
+        // === 4. 创建 DOM 结构 ===
+        var navContainer = parentDoc.createElement('div');
+        navContainer.id = 'ac-pro-right-nav';
+
+        var count = {qa_count};
+
+        for (let i = 0; i < count; i++) {{
+            // 容器
+            let item = parentDoc.createElement('div');
+            item.className = 'nav-item-container';
+            item.setAttribute('data-tooltip', '跳转到对话 ' + (i + 1));
+
+            // 点击事件
+            item.onclick = function() {{
+                // 在父窗口查找锚点
+                let anchor = parentDoc.getElementById('msg-anchor-' + i);
+                if (anchor) {{
+                    // 【关键修改】使用 block: 'start' 让锚点对齐到可视区域顶部
+                    anchor.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+                }} else {{
+                    console.log('Anchor not found: msg-anchor-' + i);
+                }}
+            }};
+
+            // 点
+            let dot = parentDoc.createElement('div');
+            dot.className = 'nav-dot';
+            item.appendChild(dot);
+
+            // 线 (除了最后一个)
+            if (i < count - 1) {{
+                let line = parentDoc.createElement('div');
+                line.className = 'nav-line';
+                item.appendChild(line);
+            }}
+
+            navContainer.appendChild(item);
+        }}
+
+        // === 5. 插入到父窗口 Body ===
+        parentDoc.body.appendChild(navContainer);
+
+    }})();
     </script>
     """
-    
-    # 渲染HTML内容
-    st.markdown(html_content, unsafe_allow_html=True)
+
+    # 使用 components.html 执行 JS，高度设为0使其不可见，只负责运行逻辑
+    components.html(js_code, height=0, width=0)

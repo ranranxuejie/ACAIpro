@@ -13,7 +13,7 @@ codeBackgroundColor = "#F9F9F9"  # 代码块背景色（深色，突出代码）
 
 # 深色主题配置
 [theme.dark]
-primaryColor = "#0083B8"
+primaryColor = "#ff4b4b"
 backgroundColor = "#212121"
 secondaryBackgroundColor = "#2F2F2F"
 textColor = "#FFFFFF"
