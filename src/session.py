@@ -21,10 +21,10 @@ def init_session_state():
         st.session_state.selected_model = "gemini-3-pro-preview"  # 默认模型
     if "current_session_model" not in st.session_state:
         st.session_state.current_session_model = "gemini-3-pro-preview"  # 当前会话使用的模型
-    if "saved_api_token" not in st.session_state:
-        st.session_state.saved_api_token = CONFIG["token"]
-    if "remember_token" not in st.session_state:
-        # 如果从CONFIG加载了token，默认记住token
-        st.session_state.remember_token = bool(CONFIG["token"])
+    if "saved_api_authorization" not in st.session_state:
+        st.session_state.saved_api_authorization = CONFIG["authorization"]
+    if "remember_authorization" not in st.session_state:
+        # 如果从CONFIG加载了authorization，默认记住authorization
+        st.session_state.remember_authorization = bool(CONFIG["authorization"])
     if "useFiles" not in st.session_state:
         st.session_state.useFiles = []  # 存储对话中涉及的所有文件

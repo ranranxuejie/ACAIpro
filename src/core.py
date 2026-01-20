@@ -8,15 +8,15 @@ class AIClient:
     """
     AI客户端类，处理与API的交互
     """
-    def __init__(self, token):
-        self.token = token
+    def __init__(self, authorization):
+        self.authorization = authorization
         self.session_id = None
         self.base_url = CONFIG["base_url"]
         # 新增：用于存储最后一次对话的完整元数据（时间、Tokens等）
         self.last_chat_metadata = {}
         self.last_tokens_used = 0
         self.headers = {
-            "Authorization": token,
+            "Authorization": authorization,
             "Content-Type": "application/json",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",
             "Origin": "https://achuanai.vip",

@@ -147,7 +147,7 @@ def check_and_execute_deletion():
                     ok, _ = bot.get_chat_records(bot.session_id)
                     if ok:
                         from .sidebar import load_session_to_state
-                        load_session_to_state(bot.session_id, "", st.session_state.get("current_session_model"), bot.token)
+                        load_session_to_state(bot.session_id, "", st.session_state.get("current_session_model"), bot.authorization)
                 else:
                     st.toast(f"删除失败: {msg}", icon="❌")
 

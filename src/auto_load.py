@@ -8,27 +8,27 @@ def auto_load_data():
     """
     自动加载模型列表和会话
     """
-    # 检查并处理初始token
-    def process_initial_token():
+    # 检查并处理初始authorization
+    def process_initial_authorization():
         """
-        检查并处理初始token
+        检查并处理初始authorization
         """
-        # 检查是否有初始token（从secrets或env var）但尚未保存到session_state
-        has_initial_token = CONFIG["token"] and not st.session_state.get("saved_api_token")
+        # 检查是否有初始authorization（从配置中）但尚未保存到session_state
+        has_initial_authorization = CONFIG["authorization"] and not st.session_state.get("saved_api_authorization")
         
-        if has_initial_token:
-            # 保存初始token到session_state
-            st.session_state["saved_api_token"] = CONFIG["token"]
-            st.session_state["remember_token"] = True
+        if has_initial_authorization:
+            # 保存初始authorization到session_state
+            st.session_state["saved_api_authorization"] = CONFIG["authorization"]
+            st.session_state["remember_authorization"] = True
             return True
         return False
     
-    # 处理初始token
-    token_processed = process_initial_token()
+    # 处理初始authorization
+    authorization_processed = process_initial_authorization()
     
     # 自动加载模型列表
     if not st.session_state.models:
-        bot_instance = AIClient(st.session_state.get("saved_api_token", CONFIG["token"]))
+        bot_instance = AIClient(st.session_state.get("saved_api_authorization", CONFIG["authorization"]))
         success, data = bot_instance.get_model_list()
         if success:
             st.session_state.models = data.get("models", [])
@@ -38,8 +38,8 @@ def auto_load_data():
 
     # 自动加载会话列表并打开最近一次对话
     # 只有在会话列表为空时才加载，避免无限循环
-    if not st.session_state.sessions or token_processed:  # 当token被处理时，强制加载会话列表
-        bot_instance = AIClient(st.session_state.get("saved_api_token", CONFIG["token"]))
+    if not st.session_state.sessions or authorization_processed:  # 当authorization被处理时，强制加载会话列表
+        bot_instance = AIClient(st.session_state.get("saved_api_authorization", CONFIG["authorization"]))
         success, data = bot_instance.get_sessions()
         if success:
             # 始终更新会话列表

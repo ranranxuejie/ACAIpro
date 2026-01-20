@@ -24,16 +24,16 @@ def handle_header_actions():
         if action == "new_chat":
             qp.clear()
 
-            # 获取 Token
-            user_token = st.session_state.get("saved_api_token", CONFIG.get("token"))
-            if not user_token:
-                st.error("未检测到 API Token")
+            # 获取 Authorization
+            user_authorization = st.session_state.get("saved_api_authorization", CONFIG.get("authorization"))
+            if not user_authorization:
+                st.error("未检测到 API Authorization")
                 return
 
             # 获取当前选中的模型
             model = st.session_state.get("selected_model", "gemini-3-pro-preview")
 
-            bot = AIClient(user_token)
+            bot = AIClient(user_authorization)
             success, msg = bot.create_session(model=model)
 
             if success:
@@ -44,7 +44,7 @@ def handle_header_actions():
 
                 # 2. 加载新会话
                 from .sidebar import load_session_to_state
-                load_session_to_state(msg, "New Chat", model, user_token)
+                load_session_to_state(msg, "New Chat", model, user_authorization)
             else:
                 st.toast(f"新建失败: {msg}", icon="❌")
 

@@ -27,14 +27,14 @@ def get_session_group(timestamp_str, is_pinned=False):
         return "更早"
     except:
         return "未知时间"
-def load_session_to_state(session_id, session_name, session_model, user_token):
+def load_session_to_state(session_id, session_name, session_model, user_authorization):
     """加载会话数据到全局状态"""
     if not st.session_state.bot:
-        st.session_state.bot = AIClient(user_token)
+        st.session_state.bot = AIClient(user_authorization)
 
-    # --- 修复点：同时更新 token 属性和 headers 字典 ---
-    st.session_state.bot.token = user_token
-    st.session_state.bot.headers["Authorization"] = user_token 
+    # --- 修复点：同时更新 authorization 属性和 headers 字典 ---
+    st.session_state.bot.authorization = user_authorization
+    st.session_state.bot.headers["Authorization"] = user_authorization 
     # -----------------------------------------------
 
     st.session_state.bot.session_id = session_id
@@ -214,7 +214,7 @@ def inject_sidebar_styles_via_js():
     components.html(js, height=0, width=0)
 
 # --- 3. 组件渲染函数 ---
-def render_model_selector(user_token):
+def render_model_selector(user_authorization):
     """
     渲染模型选择器，保持双重逻辑
     """
@@ -234,10 +234,10 @@ def render_model_selector(user_token):
         
         # 注意：这里的“新建对话”按钮在 stHorizontalBlock 之外
         if st.button("✨ 新建对话", use_container_width=True, type="primary"):
-            if not user_token: 
-                st.error("缺 Token")
+            if not user_authorization: 
+                st.error("缺 Authorization")
             else:
-                bot = AIClient(user_token)
+                bot = AIClient(user_authorization)
                 ok, msg = bot.create_session(model=selected_val)
                 if ok: 
                     # --- 修复点：新建成功后，立即同步一次会话列表 ---
@@ -247,7 +247,7 @@ def render_model_selector(user_token):
                         st.session_state.sessions = sessions_data
                     # ---------------------------------------------
 
-                    load_session_to_state(msg, "New Chat", selected_val, user_token)
+                    load_session_to_state(msg, "New Chat", selected_val, user_authorization)
                 else: 
                     st.toast(msg, icon="❌")
 
@@ -267,7 +267,7 @@ def render_model_selector(user_token):
             if active_session_id:
                 curr_s = next((s for s in st.session_state.sessions if s["id"] == active_session_id), None)
                 if curr_s:
-                    bot = AIClient(user_token)
+                    bot = AIClient(user_authorization)
                     ok, _ = bot.update_session(active_session_id, {"model": selected_val}, curr_s)
                     if ok:
                         curr_s["model"] = selected_val
@@ -277,7 +277,7 @@ def render_model_selector(user_token):
             else:
                 st.rerun()
 
-def render_session_list(user_token):
+def render_session_list(user_authorization):
     st.html('<div style="height: 15px;"></div>')
     st.text_input("搜索", placeholder="🔍 搜索...", key="search_query", label_visibility="collapsed")
     query = st.session_state.get("search_query", "").lower()
@@ -326,7 +326,7 @@ def render_session_list(user_token):
                     # is_active 决定了 primary/secondary
                     # CSS 监控这一行：如果有 primary 按钮，整行变红
                     if st.button(s_name, key=f"sess_{s_id}", type="primary" if is_active else "secondary"):
-                        load_session_to_state(s_id, s_name, s.get("model"), user_token)
+                        load_session_to_state(s_id, s_name, s.get("model"), user_authorization)
 
                 with c2:
                     with st.popover(" ", use_container_width=True):
@@ -334,21 +334,21 @@ def render_session_list(user_token):
 
                         pin_label = "🚫 取消置顶" if is_pinned else "📌 置顶"
                         if st.button(pin_label, key=f"pin_{s_id}", use_container_width=True):
-                            bot = AIClient(user_token)
+                            bot = AIClient(user_authorization)
                             if bot.toggle_session_pin(s)[0]:
                                 st.session_state.sessions = bot.get_sessions()[1]
                                 st.rerun()
 
                         new_name = st.text_input("重命名", value=s_name, key=f"ren_{s_id}")
                         if new_name != s_name and st.button("确认修改", key=f"ren_btn_{s_id}"):
-                             bot = AIClient(user_token)
+                             bot = AIClient(user_authorization)
                              bot.update_session(s_id, {"name": new_name}, s)
                              s["name"] = new_name 
                              st.rerun()
 
                         st.divider()
                         if st.button("🗑️ 删除", key=f"del_{s_id}", type="primary", use_container_width=True):
-                            bot = AIClient(user_token)
+                            bot = AIClient(user_authorization)
                             if bot.delete_session(s_id)[0]:
                                 st.session_state.sessions = bot.get_sessions()[1]
                                 if is_active: 
@@ -358,19 +358,19 @@ def render_session_list(user_token):
 
 def render_config_area():
     with st.expander("⚙️ 设置", expanded=False):
-        saved = st.session_state.get("saved_api_token", CONFIG["token"])
-        new_token = st.text_input("API Token", value=saved, type="password", key="token_in")
-
+        saved = st.session_state.get("saved_api_authorization", CONFIG["authorization"])
+        new_authorization = st.text_input("API Authorization", value=saved, type="password", key="authorization_in")
+        
         col_c1, col_c2 = st.columns([0.6, 0.4])
-        if col_c1.checkbox("记住 Token", value=st.session_state.get("remember_token", False)):
-            if st.session_state.get("saved_api_token") != new_token:
-                st.session_state["saved_api_token"] = new_token
-                st.session_state["remember_token"] = True
+        if col_c1.checkbox("记住 Authorization", value=st.session_state.get("remember_authorization", False)):
+            if st.session_state.get("saved_api_authorization") != new_authorization:
+                st.session_state["saved_api_authorization"] = new_authorization
+                st.session_state["remember_authorization"] = True
                 st.rerun()
         else:
-            if "saved_api_token" in st.session_state:
-                del st.session_state["saved_api_token"]
-                st.session_state["remember_token"] = False
+            if "saved_api_authorization" in st.session_state:
+                del st.session_state["saved_api_authorization"]
+                st.session_state["remember_authorization"] = False
                 st.rerun()
 
         st.divider()
@@ -391,9 +391,9 @@ def render_config_area():
 def render_sidebar():
     with st.sidebar:
         inject_sidebar_styles_via_js()
-        user_token = st.session_state.get("saved_api_token", CONFIG["token"])
-        render_model_selector(user_token)
+        user_authorization = st.session_state.get("saved_api_authorization", CONFIG["authorization"])
+        render_model_selector(user_authorization)
         st.write("") 
-        render_session_list(user_token)
+        render_session_list(user_authorization)
         st.divider()
         render_config_area()
