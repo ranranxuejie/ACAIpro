@@ -279,7 +279,7 @@ def render_model_selector(user_token):
 
 def render_session_list(user_token):
     st.html('<div style="height: 15px;"></div>')
-    st.text_input("", placeholder="🔍 搜索...", key="search_query", label_visibility="collapsed")
+    st.text_input("搜索", placeholder="🔍 搜索...", key="search_query", label_visibility="collapsed")
     query = st.session_state.get("search_query", "").lower()
     st.html('<div style="height: 15px;"></div>')
     if not st.session_state.sessions:
