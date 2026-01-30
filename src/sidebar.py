@@ -231,6 +231,19 @@ def render_model_selector(user_authorization):
         display_model = st.session_state.models[0]["value"]
 
     with st.container():
+        # 先准备模型列表和选择器，确保selected_val在使用前被定义
+        all_models = [m["value"] for m in st.session_state.models]
+        if display_model not in all_models: all_models.insert(0, display_model)
+        st.html('<div style="height: 15px;"></div>')
+        
+        # 定义selected_val变量
+        selected_val = st.selectbox(
+            "选择模型", 
+            all_models, 
+            index=all_models.index(display_model) if display_model in all_models else 0,
+            label_visibility="collapsed",
+            key="sidebar_model_select"
+        )
         
         # 注意：这里的“新建对话”按钮在 stHorizontalBlock 之外
         if st.button("✨ 新建对话", use_container_width=True, type="primary"):
@@ -250,17 +263,6 @@ def render_model_selector(user_authorization):
                     load_session_to_state(msg, "New Chat", selected_val, user_authorization)
                 else: 
                     st.toast(msg, icon="❌")
-
-        all_models = [m["value"] for m in st.session_state.models]
-        if display_model not in all_models: all_models.insert(0, display_model)
-        st.html('<div style="height: 15px;"></div>')
-        selected_val = st.selectbox(
-            "选择模型", 
-            all_models, 
-            index=all_models.index(display_model) if display_model in all_models else 0,
-            label_visibility="collapsed",
-            key="sidebar_model_select"
-        )
 
         if selected_val != display_model:
             st.session_state.selected_model = selected_val
