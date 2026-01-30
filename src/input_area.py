@@ -108,7 +108,7 @@ def handle_user_input(prompt, uploaded_files):
                 response_placeholder.empty()
                 with response_placeholder.container():
                     if think_content or is_thinking:
-                        status_label = "🤔 思考中..." if is_thinking else "💡 思考过程"
+                        status_label = "🤔 Thinking..." if is_thinking else "💡 思考过程"
                         with st.expander(status_label, expanded=is_thinking):
                             st.markdown(f"{think_content}{'...' if is_thinking else ''}")
                     if main_content:
