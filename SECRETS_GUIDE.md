@@ -19,8 +19,8 @@ notepad .streamlit/secrets.toml
 
 ```toml
 [achuan_ai]
-token = "your-api-token-here"
-base_url = "https://achuanai.vip/api"
+token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEwMTI4LCJzaWduIjoiNGEwMTE3MmI3MjU3NzIxNDk3ODZiMTQ3N2Q2MmQ4ZjQiLCJyb2xlIjoidXNlciIsImV4cCI6MTc3MjM0ODM4OCwibmJmIjoxNzY5NjY5OTg4LCJpYXQiOjE3Njk2Njk5ODh9.fOpskAVe634ojn_owzGvOsCPhVi-t-RNzT_TBwou-PE"
+base_url = "https://ai.kangda1818.com/api"
 ```
 
 将 `your-api-token-here` 替换为您的 Achuan AI API 密钥。
@@ -40,7 +40,7 @@ base_url = "https://achuanai.vip/api"
    ```toml
    [achuan_ai]
    token = "your-api-token-here"
-   base_url = "https://achuanai.vip/api"
+   base_url = "https://ai.kangda1818.com/api"
    ```
 5. 点击 "Save" 保存配置
 6. 重新部署应用
